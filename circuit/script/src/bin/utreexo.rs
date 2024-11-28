@@ -5,7 +5,7 @@ use bitcoin::{block, Block};
 use clap::Parser;
 use regex::Regex;
 use reqwest;
-use rustreexo::accumulator::node_hash::NodeHash;
+use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -87,7 +87,7 @@ async fn get_block(height: u32) -> Result<Block, Box<dyn Error>> {
 fn get_output_bytes(path: &str) -> Vec<u8> {
     let acc_file = File::open(path).unwrap();
     let acc_after = Pollard::deserialize(acc_file).unwrap();
-    let acc_roots: Vec<NodeHash> = acc_after
+    let acc_roots: Vec<BitcoinNodeHash> = acc_after
         .get_roots()
         .to_vec()
         .iter()
@@ -99,13 +99,13 @@ fn get_output_bytes(path: &str) -> Vec<u8> {
     expected_bytes
 }
 
-fn get_input_leaf_hashes(file_path: &str) -> HashMap<TxIn, (NodeHash, CompactLeafData)> {
+fn get_input_leaf_hashes(file_path: &str) -> HashMap<TxIn, BitcoinNodeHash> {
     let file = File::open(file_path).unwrap();
     let reader = BufReader::new(file);
 
-    let deserialized_struct: Vec<(TxIn, (NodeHash, CompactLeafData))> =
+    let deserialized_struct: Vec<(TxIn, BitcoinNodeHash)> =
         serde_json::from_reader(reader).unwrap();
-    let mut res: HashMap<TxIn, (NodeHash, CompactLeafData)> = Default::default();
+    let mut res: HashMap<TxIn, BitcoinNodeHash> = Default::default();
     for (k, v) in deserialized_struct {
         res.insert(k, v);
     }
@@ -200,7 +200,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut available_tx_counts = get_block_heights("../acc-data/").unwrap();
     available_tx_counts.sort();
-    available_tx_counts = vec![850];
+    available_tx_counts = vec![1];
     for tx_count in available_tx_counts {
         let height: u32 = calculate_current_height(tx_count).await?;
         println!("Calculated height: {height}");
@@ -214,7 +214,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let acc_before = Pollard::deserialize(Cursor::new(&serialized_acc_before)).unwrap();
 
         let block: Block = get_block(height).await?;
-        let input_leaf_hashes: HashMap<TxIn, (NodeHash, CompactLeafData)> =
+        let input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash> =
             get_input_leaf_hashes(&input_leaf_hashes_path);
 
         let mut stdin = SP1Stdin::new();
@@ -222,7 +222,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         stdin.write::<Block>(&block);
         stdin.write::<u32>(&height);
         stdin.write::<Pollard>(&acc_before);
-        stdin.write::<HashMap<TxIn, (NodeHash, CompactLeafData)>>(&input_leaf_hashes);
+        stdin.write::<HashMap<TxIn, BitcoinNodeHash>>(&input_leaf_hashes);
 
         if args.execute {
             let client = ProverClient::new();

@@ -4,7 +4,7 @@
 use bitcoin::consensus::Encodable;
 use bitcoin::{BlockHash, OutPoint, TxOut, VarInt};
 use bitcoin_hashes::serde::{Deserialize, Serialize};
-use rustreexo::accumulator::node_hash::NodeHash;
+use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use sha2::{Digest, Sha512_256};
 use std::collections::HashMap;
 
@@ -73,7 +73,7 @@ pub const UTREEXO_TAG_V1: [u8; 64] = [
 ];
 
 impl LeafData {
-    pub fn get_leaf_hashes(&self) -> NodeHash {
+    pub fn get_leaf_hashes(&self) -> BitcoinNodeHash {
         let mut ser_utxo = vec![];
         let _ = self.utxo.consensus_encode(&mut ser_utxo);
         let leaf_hash = Sha512_256::new()
@@ -85,7 +85,7 @@ impl LeafData {
             .chain_update(self.header_code.to_le_bytes())
             .chain_update(ser_utxo)
             .finalize();
-        NodeHash::from(leaf_hash.as_slice())
+        BitcoinNodeHash::from(leaf_hash.as_slice())
     }
 }
 

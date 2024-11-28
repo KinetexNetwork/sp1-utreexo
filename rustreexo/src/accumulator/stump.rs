@@ -35,7 +35,7 @@ use serde::Deserialize;
 #[cfg(feature = "with-serde")]
 use serde::Serialize;
 
-use super::node_hash::NodeHash;
+use super::node_hash::BitcoinNodeHash;
 use super::proof::NodesAndRootsOldNew;
 use super::proof::Proof;
 use super::util;
@@ -44,7 +44,7 @@ use super::util;
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub struct Stump {
     pub leaves: u64,
-    pub roots: Vec<NodeHash>,
+    pub roots: Vec<BitcoinNodeHash>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -54,9 +54,9 @@ pub struct UpdateData {
     /// pre_num_leaves is the numLeaves of the stump before the add.
     pub(crate) prev_num_leaves: u64,
     /// new_add are the new hashes for the newly created roots after the addition.
-    pub(crate) new_add: Vec<(u64, NodeHash)>,
+    pub(crate) new_add: Vec<(u64, BitcoinNodeHash)>,
     /// new_del are the new hashes after the deletion.
-    pub(crate) new_del: Vec<(u64, NodeHash)>,
+    pub(crate) new_del: Vec<(u64, BitcoinNodeHash)>,
 }
 
 impl Stump {
@@ -72,7 +72,7 @@ impl Stump {
             roots: Vec::new(),
         }
     }
-    pub fn verify(&self, proof: &Proof, del_hashes: &[NodeHash]) -> Result<bool, String> {
+    pub fn verify(&self, proof: &Proof, del_hashes: &[BitcoinNodeHash]) -> Result<bool, String> {
         proof.verify(del_hashes, &self.roots, self.leaves)
     }
     /// Modify is the external API to change the accumulator state. Since order
@@ -83,12 +83,12 @@ impl Stump {
     /// ```
     /// use std::str::FromStr;
     ///
-    /// use rustreexo::accumulator::node_hash::NodeHash;
+    /// use rustreexo::accumulator::node_hash::BitcoinNodeHash;
     /// use rustreexo::accumulator::proof::Proof;
     /// use rustreexo::accumulator::stump::Stump;
     ///
     /// let s = Stump::new();
-    /// let utxos = vec![NodeHash::from_str(
+    /// let utxos = vec![BitcoinNodeHash::from_str(
     ///     "b151a956139bb821d4effa34ea95c17560e0135d1e4661fc23cedc3af49dac42",
     /// )
     /// .unwrap()];
@@ -99,8 +99,8 @@ impl Stump {
     /// ```
     pub fn modify(
         &self,
-        utxos: &[NodeHash],
-        del_hashes: &[NodeHash],
+        utxos: &[BitcoinNodeHash],
+        del_hashes: &[BitcoinNodeHash],
         proof: &Proof,
     ) -> Result<(Stump, UpdateData), String> {
         let (intermediate, mut computed_roots) = self.remove(del_hashes, proof)?;
@@ -142,12 +142,12 @@ impl Stump {
     /// Serialize the Stump into a byte array
     /// # Example
     /// ```
-    /// use rustreexo::accumulator::node_hash::NodeHash;
+    /// use rustreexo::accumulator::node_hash::BitcoinNodeHash;
     /// use rustreexo::accumulator::proof::Proof;
     /// use rustreexo::accumulator::stump::Stump;
     /// let hashes = [0, 1, 2, 3, 4, 5, 6, 7]
     ///     .iter()
-    ///     .map(|&el| NodeHash::from([el; 32]))
+    ///     .map(|&el| BitcoinNodeHash::from([el; 32]))
     ///     .collect::<Vec<_>>();
     /// let (stump, _) = Stump::new()
     ///     .modify(&hashes, &[], &Proof::default())
@@ -176,7 +176,7 @@ impl Stump {
     /// Deserialize the Stump from a Reader
     /// # Example
     /// ```
-    /// use rustreexo::accumulator::node_hash::NodeHash;
+    /// use rustreexo::accumulator::node_hash::BitcoinNodeHash;
     /// use rustreexo::accumulator::proof::Proof;
     /// use rustreexo::accumulator::stump::Stump;
     /// let buffer = vec![
@@ -187,7 +187,7 @@ impl Stump {
     /// let mut buffer = std::io::Cursor::new(buffer);
     /// let hashes = [0, 1, 2, 3, 4, 5, 6, 7]
     ///     .iter()
-    ///     .map(|&el| NodeHash::from([el; 32]))
+    ///     .map(|&el| BitcoinNodeHash::from([el; 32]))
     ///     .collect::<Vec<_>>();
     /// let (stump, _) = Stump::new()
     ///     .modify(&hashes, &[], &Proof::default())
@@ -204,7 +204,7 @@ impl Stump {
             let mut root = [0u8; 32];
             data.read_exact(&mut root).map_err(|e| e.to_string())?;
 
-            roots.push(NodeHash::from(root));
+            roots.push(BitcoinNodeHash::from(root));
         }
         Ok(Stump { leaves, roots })
     }
@@ -231,7 +231,7 @@ impl Stump {
 
     fn remove(
         &self,
-        del_hashes: &[NodeHash],
+        del_hashes: &[BitcoinNodeHash],
         proof: &Proof,
     ) -> Result<NodesAndRootsOldNew, String> {
         if del_hashes.is_empty() {
@@ -243,19 +243,19 @@ impl Stump {
 
         let del_hashes = del_hashes
             .iter()
-            .map(|hash| (*hash, NodeHash::empty()))
+            .map(|hash| (*hash, BitcoinNodeHash::empty()))
             .collect::<Vec<_>>();
         proof.calculate_hashes_delete(&del_hashes, self.leaves)
     }
 
     /// Adds new leaves into the root
     fn add(
-        mut roots: Vec<NodeHash>,
-        utxos: &[NodeHash],
+        mut roots: Vec<BitcoinNodeHash>,
+        utxos: &[BitcoinNodeHash],
         mut leaves: u64,
-    ) -> (Vec<NodeHash>, Vec<(u64, NodeHash)>, Vec<u64>) {
+    ) -> (Vec<BitcoinNodeHash>, Vec<(u64, BitcoinNodeHash)>, Vec<u64>) {
         let after_rows = util::tree_rows(leaves + (utxos.len() as u64));
-        let mut updated_subtree: Vec<(u64, NodeHash)> = vec![];
+        let mut updated_subtree: Vec<(u64, BitcoinNodeHash)> = vec![];
         let all_deleted = util::roots_to_destroy(utxos.len() as u64, leaves, &roots);
 
         for (i, add) in utxos.iter().enumerate() {
@@ -287,7 +287,7 @@ impl Stump {
                         updated_subtree.push((pos, to_add));
                         pos = util::parent(pos, after_rows);
 
-                        to_add = NodeHash::parent_hash(&root, &to_add);
+                        to_add = BitcoinNodeHash::parent_hash(&root, &to_add);
                     }
                 }
                 h += 1;
@@ -312,7 +312,7 @@ mod test {
     use serde::Deserialize;
 
     use super::Stump;
-    use crate::accumulator::node_hash::NodeHash;
+    use crate::accumulator::node_hash::BitcoinNodeHash;
     use crate::accumulator::proof::Proof;
     use crate::accumulator::util::hash_from_u8;
 
@@ -366,7 +366,7 @@ mod test {
             let roots = data
                 .roots
                 .iter()
-                .map(|hash| NodeHash::from_str(hash).unwrap())
+                .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
                 .collect();
             let stump = Stump {
                 leaves: data.leaves,

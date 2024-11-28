@@ -4,7 +4,7 @@ sp1_zkvm::entrypoint!(main);
 
 use alloy_sol_types::{sol, SolType};
 use bitcoin::{Block, TxIn};
-use rustreexo::accumulator::node_hash::NodeHash;
+use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -27,9 +27,9 @@ pub fn main() {
 
     let mut acc = sp1_zkvm::io::read::<Pollard>();
 
-    let input_leaf_hashes = sp1_zkvm::io::read::<HashMap<TxIn, (NodeHash, CompactLeafData)>>();
-    let (_proof, _compact_leaves) = process_block(&block, height, &mut acc, input_leaf_hashes);
-    let acc_roots: Vec<NodeHash> = acc
+    let input_leaf_hashes = sp1_zkvm::io::read::<HashMap<TxIn, BitcoinNodeHash>>();
+    let _proof = process_block(&block, height, &mut acc, input_leaf_hashes);
+    let acc_roots: Vec<BitcoinNodeHash> = acc
         .get_roots()
         .to_vec()
         .iter()

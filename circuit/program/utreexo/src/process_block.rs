@@ -1,31 +1,29 @@
 use bitcoin::consensus::Encodable;
 use bitcoin::{Block, BlockHash, OutPoint, TxIn, VarInt};
 use bitcoin_hashes::sha256d::Hash;
-use rustreexo::accumulator::node_hash::NodeHash;
+use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use std::collections::HashMap;
 
-use crate::btc_structs::{BatchProof, CompactLeafData, LeafData};
+use crate::btc_structs::{BatchProof, LeafData};
 
 pub fn process_block(
     block: &Block,
     height: u32,
     acc: &mut Pollard,
-    input_leaf_hashes: HashMap<TxIn, (NodeHash, CompactLeafData)>,
-) -> (BatchProof, Vec<CompactLeafData>) {
+    input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash>,
+) -> BatchProof {
     let mut inputs = Vec::new();
     let mut utxos = Vec::new();
-    let mut compact_leaves = Vec::new();
     for tx in block.txdata.iter() {
         let txid = tx.compute_txid();
         for input in tx.input.iter() {
             if !tx.is_coinbase() {
-                let (hash, compact_leaf) = input_leaf_hashes.get(&input).unwrap().clone();
+                let hash = input_leaf_hashes.get(&input).unwrap().clone();
                 if let Some(idx) = utxos.iter().position(|h| *h == hash) {
                     utxos.remove(idx);
                 } else {
                     inputs.push(hash);
-                    compact_leaves.push(compact_leaf);
                 }
             }
         }
@@ -57,7 +55,6 @@ pub fn process_block(
     acc.get_roots().iter().for_each(|x| {
         x.get_data().consensus_encode(&mut ser_acc).unwrap();
     });
-    (
         BatchProof {
             targets: proof.targets.iter().map(|target| VarInt(*target)).collect(),
             hashes: proof
@@ -65,7 +62,5 @@ pub fn process_block(
                 .iter()
                 .map(|hash| BlockHash::from_raw_hash(*Hash::from_bytes_ref(&*hash)))
                 .collect(),
-        },
-        compact_leaves,
-    )
+        }
 }

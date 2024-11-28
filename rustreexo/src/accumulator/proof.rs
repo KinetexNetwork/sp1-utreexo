@@ -57,7 +57,7 @@ use serde::Deserialize;
 #[cfg(feature = "with-serde")]
 use serde::Serialize;
 
-use super::node_hash::NodeHash;
+use super::node_hash::BitcoinNodeHash;
 use super::stump::UpdateData;
 use super::util::get_proof_positions;
 use super::util::read_u64;
@@ -92,7 +92,7 @@ pub struct Proof {
     /// // |---\   |---\
     /// // 00  01  02  03
     /// ```
-    pub hashes: Vec<NodeHash>,
+    pub hashes: Vec<BitcoinNodeHash>,
 }
 
 // We often need to return the targets paired with hashes, and the proof position.
@@ -101,17 +101,17 @@ pub struct Proof {
 
 /// This alias is used when we need to return the nodes and roots for a proof
 /// if we are not concerned with deleting those elements.
-pub(crate) type NodesAndRootsCurrent = (Vec<(u64, NodeHash)>, Vec<NodeHash>);
+pub(crate) type NodesAndRootsCurrent = (Vec<(u64, BitcoinNodeHash)>, Vec<BitcoinNodeHash>);
 /// This is used when we need to return the nodes and roots for a proof
 /// if we are concerned with deleting those elements. The difference is that
 /// we need to retun the old and updatated roots in the accumulator.
-pub(crate) type NodesAndRootsOldNew = (Vec<(u64, NodeHash)>, Vec<(NodeHash, NodeHash)>);
+pub(crate) type NodesAndRootsOldNew = (Vec<(u64, BitcoinNodeHash)>, Vec<(BitcoinNodeHash, BitcoinNodeHash)>);
 
 impl Proof {
     /// Creates a proof from a vector of target and hashes.
     /// `targets` are u64s and indicates the position of the leaves we are
     /// trying to prove.
-    /// `hashes` are of type `NodeHash` and are all hashes we need for computing the roots.
+    /// `hashes` are of type `BitcoinNodeHash` and are all hashes we need for computing the roots.
     ///
     /// Assuming a tree with leaf values [0, 1, 2, 3, 4, 5, 6, 7], we should see something like this:
     ///```!
@@ -132,7 +132,7 @@ impl Proof {
     /// ```
     /// use bitcoin_hashes::Hash;
     /// use bitcoin_hashes::HashEngine;
-    /// use rustreexo::accumulator::node_hash::NodeHash;
+    /// use rustreexo::accumulator::node_hash::BitcoinNodeHash;
     /// use rustreexo::accumulator::proof::Proof;
     /// let targets = vec![0];
     ///
@@ -142,7 +142,7 @@ impl Proof {
     /// // Fill `proof_hashes` up with all hashes
     /// Proof::new(targets, proof_hashes);
     /// ```
-    pub fn new(targets: Vec<u64>, hashes: Vec<NodeHash>) -> Self {
+    pub fn new(targets: Vec<u64>, hashes: Vec<BitcoinNodeHash>) -> Self {
         Proof { targets, hashes }
     }
     /// Public interface for verifying proofs. Returns a result with a bool or an Error
@@ -155,7 +155,7 @@ impl Proof {
     /// use bitcoin_hashes::sha256;
     /// use bitcoin_hashes::Hash;
     /// use bitcoin_hashes::HashEngine;
-    /// use rustreexo::accumulator::node_hash::NodeHash;
+    /// use rustreexo::accumulator::node_hash::BitcoinNodeHash;
     /// use rustreexo::accumulator::proof::Proof;
     /// use rustreexo::accumulator::stump::Stump;
     /// let s = Stump::new();
@@ -175,15 +175,15 @@ impl Proof {
     /// // 00   01  02   03  04   05  06   07
     /// // For proving 0, we need 01, 09 and 13's hashes. 00, 08, 12 and 14 can be calculated
     /// proof_hashes.push(
-    ///     NodeHash::from_str("4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a")
+    ///     BitcoinNodeHash::from_str("4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a")
     ///         .unwrap(),
     /// );
     /// proof_hashes.push(
-    ///     NodeHash::from_str("9576f4ade6e9bc3a6458b506ce3e4e890df29cb14cb5d3d887672aef55647a2b")
+    ///     BitcoinNodeHash::from_str("9576f4ade6e9bc3a6458b506ce3e4e890df29cb14cb5d3d887672aef55647a2b")
     ///         .unwrap(),
     /// );
     /// proof_hashes.push(
-    ///     NodeHash::from_str("29590a14c1b09384b94a2c0e94bf821ca75b62eacebc47893397ca88e3bbcbd7")
+    ///     BitcoinNodeHash::from_str("29590a14c1b09384b94a2c0e94bf821ca75b62eacebc47893397ca88e3bbcbd7")
     ///         .unwrap(),
     /// );
     ///
@@ -199,15 +199,15 @@ impl Proof {
     /// ```
     pub fn verify(
         &self,
-        del_hashes: &[NodeHash],
-        roots: &[NodeHash],
+        del_hashes: &[BitcoinNodeHash],
+        roots: &[BitcoinNodeHash],
         num_leaves: u64,
     ) -> Result<bool, String> {
         if self.targets.is_empty() {
             return Ok(true);
         }
 
-        let mut calculated_roots: std::iter::Peekable<std::vec::IntoIter<NodeHash>> = self
+        let mut calculated_roots: std::iter::Peekable<std::vec::IntoIter<BitcoinNodeHash>> = self
             .calculate_hashes(del_hashes, num_leaves)?
             .1
             .into_iter()
@@ -244,7 +244,7 @@ impl Proof {
     /// ```
     pub fn get_proof_subset(
         &self,
-        del_hashes: &[NodeHash],
+        del_hashes: &[BitcoinNodeHash],
         new_targets: &[u64],
         num_leaves: u64,
     ) -> Result<Proof, String> {
@@ -257,7 +257,7 @@ impl Proof {
             .iter()
             .copied()
             .zip(self.hashes.iter().copied())
-            .collect::<HashMap<u64, NodeHash>>();
+            .collect::<HashMap<u64, BitcoinNodeHash>>();
 
         old_proof.extend(intermediate_positions);
 
@@ -271,7 +271,7 @@ impl Proof {
             }
         }
         new_proof.sort();
-        let (_, new_proof): (Vec<u64>, Vec<NodeHash>) = new_proof.into_iter().unzip();
+        let (_, new_proof): (Vec<u64>, Vec<BitcoinNodeHash>) = new_proof.into_iter().unzip();
         Ok(Proof {
             targets: new_targets.to_vec(),
             hashes: new_proof,
@@ -286,7 +286,7 @@ impl Proof {
     /// - hashes (32 bytes)
     /// # Example
     /// ```
-    /// use rustreexo::accumulator::node_hash::NodeHash;
+    /// use rustreexo::accumulator::node_hash::BitcoinNodeHash;
     /// use rustreexo::accumulator::proof::Proof;
     /// use rustreexo::accumulator::stump::Stump;
     ///
@@ -318,7 +318,7 @@ impl Proof {
     /// ```
     /// use std::io::Cursor;
     ///
-    /// use rustreexo::accumulator::node_hash::NodeHash;
+    /// use rustreexo::accumulator::node_hash::BitcoinNodeHash;
     /// use rustreexo::accumulator::proof::Proof;
     /// use rustreexo::accumulator::stump::Stump;
     /// let proof = Cursor::new(vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -359,7 +359,7 @@ impl Proof {
     /// If at least one returned element doesn't exist in the accumulator, the proof is invalid.
     pub(crate) fn calculate_hashes_delete(
         &self,
-        del_hashes: &[(NodeHash, NodeHash)],
+        del_hashes: &[(BitcoinNodeHash, BitcoinNodeHash)],
         num_leaves: u64,
     ) -> Result<NodesAndRootsOldNew, String> {
         // Where all the root hashes that we've calculated will go to.
@@ -367,7 +367,7 @@ impl Proof {
 
         // Where all the parent hashes we've calculated in a given row will go to.
         let mut calculated_root_hashes =
-            Vec::<(NodeHash, NodeHash)>::with_capacity(util::num_roots(num_leaves));
+            Vec::<(BitcoinNodeHash, BitcoinNodeHash)>::with_capacity(util::num_roots(num_leaves));
 
         // the positions that should be passed as a proof
         let proof_positions = get_proof_positions(&self.targets, num_leaves, total_rows);
@@ -415,14 +415,14 @@ impl Proof {
             }
 
             let parent_hash = match (next_hash_new.is_empty(), sibling_hash_new.is_empty()) {
-                (true, true) => NodeHash::empty(),
+                (true, true) => BitcoinNodeHash::empty(),
                 (true, false) => sibling_hash_new,
                 (false, true) => next_hash_new,
-                (false, false) => NodeHash::parent_hash(&next_hash_new, &sibling_hash_new),
+                (false, false) => BitcoinNodeHash::parent_hash(&next_hash_new, &sibling_hash_new),
             };
 
             let parent = util::parent(next_pos, total_rows);
-            let old_parent_hash = NodeHash::parent_hash(&next_hash_old, &sibling_hash_old);
+            let old_parent_hash = BitcoinNodeHash::parent_hash(&next_hash_old, &sibling_hash_old);
             computed.push((parent, (old_parent_hash, parent_hash)));
         }
 
@@ -445,7 +445,7 @@ impl Proof {
     /// needed for verification (i.e. the current accumulator).
     pub(crate) fn calculate_hashes(
         &self,
-        del_hashes: &[NodeHash],
+        del_hashes: &[BitcoinNodeHash],
         num_leaves: u64,
     ) -> Result<NodesAndRootsCurrent, String> {
         // Where all the root hashes that we've calculated will go to.
@@ -453,7 +453,7 @@ impl Proof {
 
         // Where all the parent hashes we've calculated in a given row will go to.
         let mut calculated_root_hashes =
-            Vec::<NodeHash>::with_capacity(util::num_roots(num_leaves));
+            Vec::<BitcoinNodeHash>::with_capacity(util::num_roots(num_leaves));
 
         // the positions that should be passed as a proof
         let proof_positions = get_proof_positions(&self.targets, num_leaves, total_rows);
@@ -500,7 +500,7 @@ impl Proof {
                 return Err(format!("Missing sibling for {}", next_pos));
             }
 
-            let parent_hash = NodeHash::parent_hash(&next_hash, &sibling_hash);
+            let parent_hash = BitcoinNodeHash::parent_hash(&next_hash, &sibling_hash);
             let parent = util::parent(next_pos, total_rows);
             computed.push((parent, parent_hash));
         }
@@ -547,12 +547,12 @@ impl Proof {
     /// over those UTXOs.
     pub fn update(
         self,
-        cached_hashes: Vec<NodeHash>,
-        add_hashes: Vec<NodeHash>,
+        cached_hashes: Vec<BitcoinNodeHash>,
+        add_hashes: Vec<BitcoinNodeHash>,
         block_targets: Vec<u64>,
         remembers: Vec<u64>,
         update_data: UpdateData,
-    ) -> Result<(Proof, Vec<NodeHash>), String> {
+    ) -> Result<(Proof, Vec<BitcoinNodeHash>), String> {
         let (proof_after_deletion, cached_hashes) = self.update_proof_remove(
             block_targets,
             cached_hashes,
@@ -573,15 +573,15 @@ impl Proof {
     }
     fn update_proof_add(
         self,
-        adds: Vec<NodeHash>,
-        cached_del_hashes: Vec<NodeHash>,
+        adds: Vec<BitcoinNodeHash>,
+        cached_del_hashes: Vec<BitcoinNodeHash>,
         remembers: Vec<u64>,
-        new_nodes: Vec<(u64, NodeHash)>,
+        new_nodes: Vec<(u64, BitcoinNodeHash)>,
         before_num_leaves: u64,
         to_destroy: Vec<u64>,
-    ) -> Result<(Proof, Vec<NodeHash>), String> {
+    ) -> Result<(Proof, Vec<BitcoinNodeHash>), String> {
         // Combine the hashes with the targets.
-        let orig_targets_with_hash: Vec<(u64, NodeHash)> = self
+        let orig_targets_with_hash: Vec<(u64, BitcoinNodeHash)> = self
             .targets
             .iter()
             .copied()
@@ -616,7 +616,7 @@ impl Proof {
 
         // remembers is an index telling what newly created UTXO should be cached
         for remember in remembers {
-            let remember_target: Option<&NodeHash> = adds.get(remember as usize);
+            let remember_target: Option<&BitcoinNodeHash> = adds.get(remember as usize);
             if let Some(remember_target) = remember_target {
                 let node = new_nodes_iter.find(|(_, hash)| *hash == *remember_target);
                 if let Some((pos, hash)) = node {
@@ -655,7 +655,7 @@ impl Proof {
         }
         new_proof.sort();
 
-        let (_, hashes): (Vec<u64>, Vec<NodeHash>) = new_proof.into_iter().unzip();
+        let (_, hashes): (Vec<u64>, Vec<BitcoinNodeHash>) = new_proof.into_iter().unzip();
         Ok((
             Proof {
                 hashes,
@@ -669,8 +669,8 @@ impl Proof {
     fn maybe_remap(
         num_leaves: u64,
         num_adds: u64,
-        positions: Vec<(u64, NodeHash)>,
-    ) -> Vec<(u64, NodeHash)> {
+        positions: Vec<(u64, BitcoinNodeHash)>,
+    ) -> Vec<(u64, BitcoinNodeHash)> {
         let new_forest_rows = util::tree_rows(num_leaves + num_adds);
         let old_forest_rows = util::tree_rows(num_leaves);
         let tree_rows = util::tree_rows(num_leaves);
@@ -697,13 +697,13 @@ impl Proof {
     fn update_proof_remove(
         self,
         block_targets: Vec<u64>,
-        cached_hashes: Vec<NodeHash>,
-        updated: Vec<(u64, NodeHash)>,
+        cached_hashes: Vec<BitcoinNodeHash>,
+        updated: Vec<(u64, BitcoinNodeHash)>,
         num_leaves: u64,
-    ) -> Result<(Proof, Vec<NodeHash>), String> {
+    ) -> Result<(Proof, Vec<BitcoinNodeHash>), String> {
         let total_rows = util::tree_rows(num_leaves);
 
-        let targets_with_hash: Vec<(u64, NodeHash)> = self
+        let targets_with_hash: Vec<(u64, BitcoinNodeHash)> = self
             .targets
             .iter()
             .cloned()
@@ -767,7 +767,7 @@ impl Proof {
 
         proof_elements.sort();
         // Grab the hashes for the proof
-        let (_, hashes): (Vec<u64>, Vec<NodeHash>) = proof_elements.into_iter().unzip();
+        let (_, hashes): (Vec<u64>, Vec<BitcoinNodeHash>) = proof_elements.into_iter().unzip();
         // Gets all proof targets, but with their new positions after delete
         let (targets, target_hashes) =
             Proof::calc_next_positions(&block_targets, &targets_with_hash, num_leaves, true)?
@@ -779,10 +779,10 @@ impl Proof {
 
     fn calc_next_positions(
         block_targets: &Vec<u64>,
-        old_positions: &Vec<(u64, NodeHash)>,
+        old_positions: &Vec<(u64, BitcoinNodeHash)>,
         num_leaves: u64,
         append_roots: bool,
-    ) -> Result<Vec<(u64, NodeHash)>, String> {
+    ) -> Result<Vec<(u64, BitcoinNodeHash)>, String> {
         let total_rows = util::tree_rows(num_leaves);
         let mut new_positions = vec![];
 
@@ -825,7 +825,7 @@ mod tests {
     use serde::Deserialize;
 
     use super::Proof;
-    use crate::accumulator::node_hash::NodeHash;
+    use crate::accumulator::node_hash::BitcoinNodeHash;
     use crate::accumulator::stump::Stump;
     use crate::accumulator::util::hash_from_u8;
     #[derive(Deserialize)]

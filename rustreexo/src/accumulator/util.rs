@@ -1,7 +1,7 @@
 use std::io::Read;
 
 // Rustreexo
-use super::node_hash::NodeHash;
+use super::node_hash::BitcoinNodeHash;
 
 // isRootPosition checks if the current position is a root given the number of
 // leaves and the entire rows of the forest.
@@ -89,7 +89,7 @@ pub fn left_sibling(position: u64) -> u64 {
 }
 // roots_to_destroy returns the empty roots that get written over after num_adds
 // amount of leaves have been added.
-pub fn roots_to_destroy(num_adds: u64, mut num_leaves: u64, orig_roots: &[NodeHash]) -> Vec<u64> {
+pub fn roots_to_destroy(num_adds: u64, mut num_leaves: u64, orig_roots: &[BitcoinNodeHash]) -> Vec<u64> {
     let mut roots = orig_roots.to_vec();
     let mut deleted = vec![];
     let mut h = 0;
@@ -106,7 +106,7 @@ pub fn roots_to_destroy(num_adds: u64, mut num_leaves: u64, orig_roots: &[NodeHa
             h += 1;
         }
         // Just adding a non-zero value to the slice.
-        roots.push(NodeHash::placeholder());
+        roots.push(BitcoinNodeHash::placeholder());
         num_leaves += 1;
     }
 
@@ -305,7 +305,7 @@ pub fn get_proof_positions(targets: &[u64], num_leaves: u64, forest_rows: u8) ->
     proof_positions
 }
 #[cfg(any(test, bench))]
-pub fn hash_from_u8(value: u8) -> NodeHash {
+pub fn hash_from_u8(value: u8) -> BitcoinNodeHash {
     use bitcoin_hashes::sha256;
     use bitcoin_hashes::Hash;
     use bitcoin_hashes::HashEngine;
@@ -321,7 +321,7 @@ mod tests {
     use std::vec;
 
     use super::roots_to_destroy;
-    use crate::accumulator::node_hash::NodeHash;
+    use crate::accumulator::node_hash::BitcoinNodeHash;
     use crate::accumulator::util::children;
     use crate::accumulator::util::tree_rows;
 
@@ -367,7 +367,7 @@ mod tests {
         ];
         let roots = roots
             .iter()
-            .map(|hash| NodeHash::from_str(hash).unwrap())
+            .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
             .collect::<Vec<_>>();
 
         let deleted = roots_to_destroy(1, 15, &roots);
