@@ -1,0 +1,332 @@
+Block {
+    header: BlockHeader {
+        version: 1,
+        prev_blockhash: 0000000003dd71ae0188435f706dda58dd932ef74d3f607076777677c5c31240,
+        merkle_root: dd9bfa795a0dfe64975eb03fddf8419e03f48fe6b5a97aa736b2536c035df864,
+        time: 1274582658,
+        bits: 471178276,
+        nonce: 469790646,
+    },
+    txdata: [
+        Transaction {
+            version: 1,
+            lock_time: PackedLockTime(
+                0,
+            ),
+            input: [
+                TxIn {
+                    previous_output: OutPoint {
+                        txid: 0000000000000000000000000000000000000000000000000000000000000000,
+                        vout: 4294967295,
+                    },
+                    script_sig: Script(OP_PUSHBYTES_4 249c151c OP_PUSHBYTES_1 73),
+                    sequence: Sequence(
+                        4294967295,
+                    ),
+                    witness: Witness {
+                        content: [],
+                        witness_elements: 0,
+                        last: 0,
+                        second_to_last: 0,
+                    },
+                },
+            ],
+            output: [
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04daeec739650d1da68fb63c2f143fef4728515a156d09b22c073065964223c5dd244dbad8955c0b49068c90d59944678a3884d4e8994b2f1e807904cef081fc4a OP_CHECKSIG),
+                },
+            ],
+        },
+        Transaction {
+            version: 1,
+            lock_time: PackedLockTime(
+                0,
+            ),
+            input: [
+                TxIn {
+                    previous_output: OutPoint {
+                        txid: fd608e19885e85569e6f2cfcaad36ab952e578f798337d20703dfa22866ff1a4,
+                        vout: 0,
+                    },
+                    script_sig: Script(OP_PUSHBYTES_72 30450221008dcab1b35f1e7d76f180e9166404e54bfe065cd662e733a238412f7bc0a3f26c022007dcfab62917a1b36dff45cc911886bebabe4473512c1206b963c8d5888800c401 OP_PUSHBYTES_65 048478925b23a23e73b1b3553eb1329a34244dac8cad47876aacc7bbad60eea93eedfa24a64b7678198f0fa0418336ae828e5fe1eda72255d6b29e388bd26e13af),
+                    sequence: Sequence(
+                        4294967295,
+                    ),
+                    witness: Witness {
+                        content: [],
+                        witness_elements: 0,
+                        last: 0,
+                        second_to_last: 0,
+                    },
+                },
+            ],
+            output: [
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04d289b5d1983134dc2c5913b165ea498add9a02b85e93f4afe927a00a995c6b07f33b7cc13640e99bcaf00e814c8e835711e1d1c8ad963f50acf9bc603b0234b5 OP_CHECKSIG),
+                },
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04211bdab1b4077b5367892f036a83242120bb85da1eec32cff549d62fae342032512b989e38ecee567d6a5a204fa99de5f5bfe8c503cc9acd66ab86db14c3f6f7 OP_CHECKSIG),
+                },
+            ],
+        },
+        Transaction {
+            version: 1,
+            lock_time: PackedLockTime(
+                0,
+            ),
+            input: [
+                TxIn {
+                    previous_output: OutPoint {
+                        txid: 8336031bf7ea6dbb6004eaa31e35fdab359e8d3234f3ee9a10017bfdd522766d,
+                        vout: 0,
+                    },
+                    script_sig: Script(OP_PUSHBYTES_72 3045022075778347cf75a3688e3ff46df023950f5d64e3fc4db7581bb6ab5e54c44e9048022100fc75eb23bcd0e36bd4b07d8024950ea3ecbd6ff7d20af71d500decfb5e335ed101 OP_PUSHBYTES_65 04d925fceaad1806b143bd079f987a70a5cb9ed3c87e19995a3015b339cf91813d5e5a6eaba8b751faffa97d2201999adbba7a587276a0e5f2415663ae171c035d),
+                    sequence: Sequence(
+                        4294967295,
+                    ),
+                    witness: Witness {
+                        content: [],
+                        witness_elements: 0,
+                        last: 0,
+                        second_to_last: 0,
+                    },
+                },
+            ],
+            output: [
+                TxOut {
+                    value: 10000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04f85be1a4e865676d927aceb4a9f899ebf50178caa8cd9c3bac0679cc11eee921e7a8d2b0d555ec35fe6c4eb9b75f41910af9899c472036fd4a8e4c4dc570007f OP_CHECKSIG),
+                },
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04be37860c7ba4e4d163d368d5a048989ac7257f22253a9b301d202b79ee88077699d1c0657d4d16ebd0c47ed109b7296c1857f6a7864cec584e110e1cf3cff05a OP_CHECKSIG),
+                },
+            ],
+        },
+        Transaction {
+            version: 1,
+            lock_time: PackedLockTime(
+                0,
+            ),
+            input: [
+                TxIn {
+                    previous_output: OutPoint {
+                        txid: 64c5ceabcf023ffaa11192aefb1f606ebe664b5875c2310dd18bacdeee2df5ad,
+                        vout: 0,
+                    },
+                    script_sig: Script(OP_PUSHBYTES_73 30460221009b4798dbe7cb5b8423d59063d191e024d84b2eb6d41d229deee26414b31431960221009dde01a750709943034dc251dfd51279b6bd35a54cfe0181ae08d8c0241c33ac01 OP_PUSHBYTES_65 04d925fceaad1806b143bd079f987a70a5cb9ed3c87e19995a3015b339cf91813d5e5a6eaba8b751faffa97d2201999adbba7a587276a0e5f2415663ae171c035d),
+                    sequence: Sequence(
+                        4294967295,
+                    ),
+                    witness: Witness {
+                        content: [],
+                        witness_elements: 0,
+                        last: 0,
+                        second_to_last: 0,
+                    },
+                },
+            ],
+            output: [
+                TxOut {
+                    value: 10000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 0442748268d150880d179aee6393c067c67ffbce78780fcd5dd633c47d6915594fceca8f464aac37f163619db57d4fd164d381abb6483f1a20dea5aa6708c82c33 OP_CHECKSIG),
+                },
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 044c4762214ee6cdd0d64e7cfeb65cc1e2e563d2ea8a60efc8439eb0e2319672690a2e85da113a7a1cd30dfd931f9a254e4907fa6d9ba61dcdd13660225f26a543 OP_CHECKSIG),
+                },
+            ],
+        },
+        Transaction {
+            version: 1,
+            lock_time: PackedLockTime(
+                0,
+            ),
+            input: [
+                TxIn {
+                    previous_output: OutPoint {
+                        txid: 62e9983a49a12c634bed1b92420116e49d1c12674fc0f74c403006fe3de9c799,
+                        vout: 0,
+                    },
+                    script_sig: Script(OP_PUSHBYTES_71 304402201af33d1ae7bdfd21ed1c1782e9f07401bc99c454ebb70ecc340243f33ff87a2502202927bac8c6995cbf98271cb24829337f5be4d40441f700764b2f9357ec35330301),
+                    sequence: Sequence(
+                        4294967295,
+                    ),
+                    witness: Witness {
+                        content: [],
+                        witness_elements: 0,
+                        last: 0,
+                        second_to_last: 0,
+                    },
+                },
+            ],
+            output: [
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04ec379f76f80df213626ba0a632516e215884f9cd98740383ea8d3b1fdc9b75e3405f37736d7e3d74c9542eedacb1442830bfbfe483e2f6572689ea38d6a7a243 OP_CHECKSIG),
+                },
+            ],
+        },
+        Transaction {
+            version: 1,
+            lock_time: PackedLockTime(
+                0,
+            ),
+            input: [
+                TxIn {
+                    previous_output: OutPoint {
+                        txid: 3c2512fc8473ae119beca8556f6be65cb358d3f25e6d063057fa676c1a642c4c,
+                        vout: 1,
+                    },
+                    script_sig: Script(OP_PUSHBYTES_72 3045022100ed59052ffa52659dd01ed3a32f178472d399c476d606568e8c4bcc2ba7442db102204b7e82a9772942f501b87bed1521cb02beeda23ddc4b652ae39f97286f574b7d01),
+                    sequence: Sequence(
+                        4294967295,
+                    ),
+                    witness: Witness {
+                        content: [],
+                        witness_elements: 0,
+                        last: 0,
+                        second_to_last: 0,
+                    },
+                },
+            ],
+            output: [
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 040c190159806a65247fd9d061eea3e50cfe2a8bd1856b3176b65f1c202e8da9ef90bc2600dea9da877387edf040060c3a8f30e038a201bb6687c6565e7d97dbb7 OP_CHECKSIG),
+                },
+            ],
+        },
+        Transaction {
+            version: 1,
+            lock_time: PackedLockTime(
+                0,
+            ),
+            input: [
+                TxIn {
+                    previous_output: OutPoint {
+                        txid: aa397b27bed2a9577df83eb6bbc7d6bdfb108ccfe346d204eb9bc839472a3bb7,
+                        vout: 0,
+                    },
+                    script_sig: Script(OP_PUSHBYTES_72 3045022100925d4ecd39857b773e03acba242a5fb0aa10f7e2ce5da53c1cbed07d231017a502202de52226eaf91435df66294adf754d7fc4bb869aaf5266bd95d96c712950545c01),
+                    sequence: Sequence(
+                        4294967295,
+                    ),
+                    witness: Witness {
+                        content: [],
+                        witness_elements: 0,
+                        last: 0,
+                        second_to_last: 0,
+                    },
+                },
+            ],
+            output: [
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04bdb3e6088de55be83046ee05d8f665d33586602f67c3b101eb46ecf96e3aee4a2bcd918fed47e24a255c2891fe9fcb7d34bec1f1e51cfa5463711db33db41f1e OP_CHECKSIG),
+                },
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04ff35cb1aecf96b1420faeec9a1814a45d5560a4456c6afabcc343caf9f1ee830150b3930fe09388f95bd0401a4313194fcd514b029c7771d3c9fcca47717b1f9 OP_CHECKSIG),
+                },
+            ],
+        },
+        Transaction {
+            version: 1,
+            lock_time: PackedLockTime(
+                0,
+            ),
+            input: [
+                TxIn {
+                    previous_output: OutPoint {
+                        txid: bcd3bff748813ad6b5c3137cc6b2f5563700fe858cda6fa534f38cb986f2f1ea,
+                        vout: 0,
+                    },
+                    script_sig: Script(OP_PUSHBYTES_72 304502207df3b00e53444197e130185db632b009b88dca5f5e1b730f50dba78c6b18bf5f022100d214716fdc6d9771447d979c324d4141d494e72b436fa3e2e91a29a72bb7e1ec01),
+                    sequence: Sequence(
+                        4294967295,
+                    ),
+                    witness: Witness {
+                        content: [],
+                        witness_elements: 0,
+                        last: 0,
+                        second_to_last: 0,
+                    },
+                },
+            ],
+            output: [
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 043c42fd97bfbff5d93a1ebb31e109ce8b5a1ebd90059fad343b7178e457e67212971236554511aeca4989b39a0b945421f0d570c0a3da69f9dd5016814b07d305 OP_CHECKSIG),
+                },
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04f78eca8bd81b5f9f910279fcd13b1d32f1cd567732d10a14dffc0c0705a82c6bfb440d37c5c695cacc20ce79b185232941f23f244cfa2bc15dd12d173c23b39d OP_CHECKSIG),
+                },
+            ],
+        },
+        Transaction {
+            version: 1,
+            lock_time: PackedLockTime(
+                0,
+            ),
+            input: [
+                TxIn {
+                    previous_output: OutPoint {
+                        txid: 90aa27025d52c9032a15db22e44b6f810b2e9dd1639cac461864adf863063c28,
+                        vout: 0,
+                    },
+                    script_sig: Script(OP_PUSHBYTES_73 304602210083b79d9b62943e67e007cf831c5d96ba56130f81c83b5b29f5c52d9eb56476db022100c29fda9da8074698526ae9bc3cd4f6347d5b0b7cf8787933925c44b21bc7bf3901),
+                    sequence: Sequence(
+                        4294967295,
+                    ),
+                    witness: Witness {
+                        content: [],
+                        witness_elements: 0,
+                        last: 0,
+                        second_to_last: 0,
+                    },
+                },
+            ],
+            output: [
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04630986c360cc2add1757487aef0d9955f4b6e98675276aa4e54ad23a2daafab7b1dc924300c27d4a1918dfeb99498e3f414375587ed3064a21556a17617605f2 OP_CHECKSIG),
+                },
+            ],
+        },
+        Transaction {
+            version: 1,
+            lock_time: PackedLockTime(
+                0,
+            ),
+            input: [
+                TxIn {
+                    previous_output: OutPoint {
+                        txid: 9b2857b0e22af35974e5e551dabd0160b0b1a18a02e67c21ea93c5cb35e2217d,
+                        vout: 1,
+                    },
+                    script_sig: Script(OP_PUSHBYTES_73 304602210097f314209ff84d6dc58ae67859260c499e2c6594a376a0453923f1697c1dc3e4022100e7622b69b5b410fc50153fac763657d6b905ba9f143550956048bcbc63fa983b01),
+                    sequence: Sequence(
+                        4294967295,
+                    ),
+                    witness: Witness {
+                        content: [],
+                        witness_elements: 0,
+                        last: 0,
+                        second_to_last: 0,
+                    },
+                },
+            ],
+            output: [
+                TxOut {
+                    value: 5000000000,
+                    script_pubkey: Script(OP_PUSHBYTES_65 04ff69e9a602a963ae703e8b6e6575bc34c790e40b631bc3624a19c122d485aa8dbe464b9d89ea12d071b3f0056608ea69dbfe219e7b5ec3d1b8c866fdb0c67d34 OP_CHECKSIG),
+                },
+            ],
+        },
+    ],
+}
