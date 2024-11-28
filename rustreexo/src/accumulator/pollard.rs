@@ -397,11 +397,11 @@ impl Pollard {
         let roots_len = read_u64(&mut reader)?;
         let mut roots = Vec::new();
         let mut map = HashMap::new();
-        // for _ in 0..roots_len {
-        //     let (root, _map) = Node::read_one(&mut reader)?;
-        //     map.extend(_map);
-        //     roots.push(root);
-        // }
+        for _ in 0..roots_len {
+            let (root, _map) = Node::read_one(&mut reader)?;
+            map.extend(_map);
+            roots.push(root);
+        }
         Ok(Pollard { roots, leaves, map })
     }
     /// Returns the hash of a given position in the tree.

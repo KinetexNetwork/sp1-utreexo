@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "rustreexo",
+    "server",
+    "circuit/script",
+    "circuit/program/utreexo",
+]
