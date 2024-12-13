@@ -105,7 +105,10 @@ pub(crate) type NodesAndRootsCurrent = (Vec<(u64, BitcoinNodeHash)>, Vec<Bitcoin
 /// This is used when we need to return the nodes and roots for a proof
 /// if we are concerned with deleting those elements. The difference is that
 /// we need to retun the old and updatated roots in the accumulator.
-pub(crate) type NodesAndRootsOldNew = (Vec<(u64, BitcoinNodeHash)>, Vec<(BitcoinNodeHash, BitcoinNodeHash)>);
+pub(crate) type NodesAndRootsOldNew = (
+    Vec<(u64, BitcoinNodeHash)>,
+    Vec<(BitcoinNodeHash, BitcoinNodeHash)>,
+);
 
 impl Proof {
     /// Creates a proof from a vector of target and hashes.
@@ -175,16 +178,22 @@ impl Proof {
     /// // 00   01  02   03  04   05  06   07
     /// // For proving 0, we need 01, 09 and 13's hashes. 00, 08, 12 and 14 can be calculated
     /// proof_hashes.push(
-    ///     BitcoinNodeHash::from_str("4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a")
-    ///         .unwrap(),
+    ///     BitcoinNodeHash::from_str(
+    ///         "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a",
+    ///     )
+    ///     .unwrap(),
     /// );
     /// proof_hashes.push(
-    ///     BitcoinNodeHash::from_str("9576f4ade6e9bc3a6458b506ce3e4e890df29cb14cb5d3d887672aef55647a2b")
-    ///         .unwrap(),
+    ///     BitcoinNodeHash::from_str(
+    ///         "9576f4ade6e9bc3a6458b506ce3e4e890df29cb14cb5d3d887672aef55647a2b",
+    ///     )
+    ///     .unwrap(),
     /// );
     /// proof_hashes.push(
-    ///     BitcoinNodeHash::from_str("29590a14c1b09384b94a2c0e94bf821ca75b62eacebc47893397ca88e3bbcbd7")
-    ///         .unwrap(),
+    ///     BitcoinNodeHash::from_str(
+    ///         "29590a14c1b09384b94a2c0e94bf821ca75b62eacebc47893397ca88e3bbcbd7",
+    ///     )
+    ///     .unwrap(),
     /// );
     ///
     /// let mut hashes = Vec::new();
@@ -893,19 +902,19 @@ mod tests {
                 .cached_proof
                 .hashes
                 .iter()
-                .map(|val| NodeHash::from_str(val).unwrap())
+                .map(|val| BitcoinNodeHash::from_str(val).unwrap())
                 .collect();
             let cached_hashes: Vec<_> = case_values
                 .cached_hashes
                 .iter()
-                .map(|val| NodeHash::from_str(val).unwrap())
+                .map(|val| BitcoinNodeHash::from_str(val).unwrap())
                 .collect();
 
             let cached_proof = Proof::new(case_values.cached_proof.targets, proof_hashes);
             let roots = case_values
                 .initial_roots
                 .into_iter()
-                .map(|hash| NodeHash::from_str(&hash).unwrap())
+                .map(|hash| BitcoinNodeHash::from_str(&hash).unwrap())
                 .collect();
 
             let stump = Stump {
@@ -923,14 +932,14 @@ mod tests {
                 .update
                 .del_hashes
                 .iter()
-                .map(|hash| NodeHash::from_str(hash).unwrap())
+                .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
                 .collect::<Vec<_>>();
             let block_proof_hashes = case_values
                 .update
                 .proof
                 .hashes
                 .iter()
-                .map(|hash| NodeHash::from_str(hash).unwrap())
+                .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
                 .collect::<Vec<_>>();
 
             let block_proof =
@@ -951,13 +960,13 @@ mod tests {
             let expected_roots: Vec<_> = case_values
                 .expected_roots
                 .iter()
-                .map(|hash| NodeHash::from_str(hash).unwrap())
+                .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
                 .collect();
 
             let expected_cached_hashes: Vec<_> = case_values
                 .expected_cached_hashes
                 .iter()
-                .map(|hash| NodeHash::from_str(hash).unwrap())
+                .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
                 .collect();
             assert_eq!(res, Ok(true));
             assert_eq!(cached_proof.targets, case_values.expected_targets);
@@ -969,26 +978,26 @@ mod tests {
     #[test]
     fn test_get_next() {
         use super::Proof;
-        let computed = vec![(1, NodeHash::empty()), (3, NodeHash::empty())];
-        let provided = vec![(2, NodeHash::empty()), (4, NodeHash::empty())];
+        let computed = vec![(1, BitcoinNodeHash::empty()), (3, BitcoinNodeHash::empty())];
+        let provided = vec![(2, BitcoinNodeHash::empty()), (4, BitcoinNodeHash::empty())];
         let mut computed_pos = 0;
         let mut provided_pos = 0;
 
         assert_eq!(
             Proof::get_next(&computed, &provided, &mut computed_pos, &mut provided_pos),
-            Some((1, NodeHash::empty()))
+            Some((1, BitcoinNodeHash::empty()))
         );
         assert_eq!(
             Proof::get_next(&computed, &provided, &mut computed_pos, &mut provided_pos),
-            Some((2, NodeHash::empty()))
+            Some((2, BitcoinNodeHash::empty()))
         );
         assert_eq!(
             Proof::get_next(&computed, &provided, &mut computed_pos, &mut provided_pos),
-            Some((3, NodeHash::empty()))
+            Some((3, BitcoinNodeHash::empty()))
         );
         assert_eq!(
             Proof::get_next(&computed, &provided, &mut computed_pos, &mut provided_pos),
-            Some((4, NodeHash::empty()))
+            Some((4, BitcoinNodeHash::empty()))
         );
         assert_eq!(
             Proof::get_next(&computed, &provided, &mut computed_pos, &mut provided_pos),
@@ -1004,11 +1013,11 @@ mod tests {
         struct Test {
             name: &'static str,
             block_targets: Vec<u64>,
-            old_positions: Vec<(u64, NodeHash)>,
+            old_positions: Vec<(u64, BitcoinNodeHash)>,
             num_leaves: u64,
             num_adds: u64,
             append_roots: bool,
-            expected: Vec<(u64, NodeHash)>,
+            expected: Vec<(u64, BitcoinNodeHash)>,
         }
 
         let tests = vec![Test {
@@ -1017,28 +1026,28 @@ mod tests {
             old_positions: vec![
                 (
                     1,
-                    NodeHash::from_str(
+                    BitcoinNodeHash::from_str(
                         "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a",
                     )
                     .unwrap(),
                 ),
                 (
                     13,
-                    NodeHash::from_str(
+                    BitcoinNodeHash::from_str(
                         "9d1e0e2d9459d06523ad13e28a4093c2316baafe7aec5b25f30eba2e113599c4",
                     )
                     .unwrap(),
                 ),
                 (
                     17,
-                    NodeHash::from_str(
+                    BitcoinNodeHash::from_str(
                         "9576f4ade6e9bc3a6458b506ce3e4e890df29cb14cb5d3d887672aef55647a2b",
                     )
                     .unwrap(),
                 ),
                 (
                     25,
-                    NodeHash::from_str(
+                    BitcoinNodeHash::from_str(
                         "29590a14c1b09384b94a2c0e94bf821ca75b62eacebc47893397ca88e3bbcbd7",
                     )
                     .unwrap(),
@@ -1050,28 +1059,28 @@ mod tests {
             expected: (vec![
                 (
                     1,
-                    NodeHash::from_str(
+                    BitcoinNodeHash::from_str(
                         "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a",
                     )
                     .unwrap(),
                 ),
                 (
                     17,
-                    NodeHash::from_str(
+                    BitcoinNodeHash::from_str(
                         "9576f4ade6e9bc3a6458b506ce3e4e890df29cb14cb5d3d887672aef55647a2b",
                     )
                     .unwrap(),
                 ),
                 (
                     21,
-                    NodeHash::from_str(
+                    BitcoinNodeHash::from_str(
                         "9d1e0e2d9459d06523ad13e28a4093c2316baafe7aec5b25f30eba2e113599c4",
                     )
                     .unwrap(),
                 ),
                 (
                     25,
-                    NodeHash::from_str(
+                    BitcoinNodeHash::from_str(
                         "29590a14c1b09384b94a2c0e94bf821ca75b62eacebc47893397ca88e3bbcbd7",
                     )
                     .unwrap(),
@@ -1107,7 +1116,7 @@ mod tests {
         ];
         let proof_hashes = proof_hashes
             .into_iter()
-            .map(|hash| NodeHash::from_str(hash).unwrap())
+            .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
             .collect();
 
         let cached_proof_hashes = [
@@ -1117,7 +1126,7 @@ mod tests {
         ];
         let cached_proof_hashes = cached_proof_hashes
             .iter()
-            .map(|hash| NodeHash::from_str(hash).unwrap())
+            .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
             .collect();
         let cached_proof = Proof::new(vec![0, 1, 7], cached_proof_hashes);
 
@@ -1164,7 +1173,7 @@ mod tests {
         ];
         let proof_hashes = proof
             .into_iter()
-            .map(|hash| NodeHash::from_str(hash).unwrap())
+            .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
             .collect();
 
         let p = Proof::new(vec![0, 2, 4, 6], proof_hashes);
@@ -1191,12 +1200,12 @@ mod tests {
 
         let expected_roots: Vec<_> = expected_roots
             .iter()
-            .map(|root| NodeHash::from_str(root).unwrap())
+            .map(|root| BitcoinNodeHash::from_str(root).unwrap())
             .collect();
 
         let mut expected_computed = expected_hashes
             .iter()
-            .map(|hash| NodeHash::from_str(hash).unwrap())
+            .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
             .zip(&expected_pos);
 
         let calculated = p.calculate_hashes(&del_hashes, s.leaves);
@@ -1235,22 +1244,24 @@ mod tests {
 
         let proof_hashes = proof
             .into_iter()
-            .map(|hash| NodeHash::from_str(hash).unwrap())
+            .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
             .collect();
 
         let p = Proof::new(vec![0], proof_hashes);
         let del_hashes = del_hashes
             .into_iter()
-            .map(|hash| (hash, NodeHash::empty()))
+            .map(|hash| (hash, BitcoinNodeHash::empty()))
             .collect::<Vec<_>>();
 
         let (computed, roots) = p.calculate_hashes_delete(&del_hashes, 8).unwrap();
-        let expected_root_old =
-            NodeHash::from_str("b151a956139bb821d4effa34ea95c17560e0135d1e4661fc23cedc3af49dac42")
-                .unwrap();
-        let expected_root_new =
-            NodeHash::from_str("726fdd3b432cc59e68487d126e70f0db74a236267f8daeae30b31839a4e7ebed")
-                .unwrap();
+        let expected_root_old = BitcoinNodeHash::from_str(
+            "b151a956139bb821d4effa34ea95c17560e0135d1e4661fc23cedc3af49dac42",
+        )
+        .unwrap();
+        let expected_root_new = BitcoinNodeHash::from_str(
+            "726fdd3b432cc59e68487d126e70f0db74a236267f8daeae30b31839a4e7ebed",
+        )
+        .unwrap();
 
         let computed_positions = [0_u64, 1, 9, 13, 8, 12, 14].to_vec();
         let computed_hashes = [
@@ -1263,7 +1274,7 @@ mod tests {
             "726fdd3b432cc59e68487d126e70f0db74a236267f8daeae30b31839a4e7ebed",
         ]
         .iter()
-        .map(|hash| NodeHash::from_str(hash).unwrap())
+        .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
         .collect::<Vec<_>>();
         let expected_computed: Vec<_> = computed_positions
             .into_iter()
@@ -1304,7 +1315,7 @@ mod tests {
         ];
         let proof_hashes = proof
             .into_iter()
-            .map(|hash| NodeHash::from_str(hash).unwrap())
+            .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
             .collect();
 
         let p = Proof::new(vec![0, 2, 4, 6], proof_hashes);
@@ -1329,7 +1340,7 @@ mod tests {
         let roots = case
             .roots
             .into_iter()
-            .map(|root| NodeHash::from_str(root.as_str()).expect("Test case hash is valid"))
+            .map(|root| BitcoinNodeHash::from_str(root.as_str()).expect("Test case hash is valid"))
             .collect();
 
         let s = Stump {
@@ -1347,7 +1358,7 @@ mod tests {
         let proof_hashes = case
             .proofhashes
             .into_iter()
-            .map(|hash| NodeHash::from_str(hash.as_str()).expect("Test case hash is valid"))
+            .map(|hash| BitcoinNodeHash::from_str(hash.as_str()).expect("Test case hash is valid"))
             .collect();
 
         let p = Proof::new(targets, proof_hashes);
@@ -1362,7 +1373,7 @@ mod tests {
             let set_hashes = subset
                 .iter()
                 .map(|preimage| hash_from_u8(*preimage as u8))
-                .collect::<Vec<NodeHash>>();
+                .collect::<Vec<BitcoinNodeHash>>();
 
             assert_eq!(s.verify(&proof, &set_hashes), Ok(true));
         }

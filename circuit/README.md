@@ -33,3 +33,10 @@ cd script
 TRACE_FILE=trace.log RUST_LOG=info cargo run --release -- --execute
 cargo prove trace --elf ../program/utreexo/elf/riscv32im-succinct-zkvm-elf --trace trace.log
 ```
+
+
+## How fast we are?
+
+Our target-minimum is to make circuit consumining 4 billion zk-cycles on latest blocks.
+Some target-good-enough can be 1 billion zk-cycles.
+TODO: add results here

@@ -211,9 +211,10 @@ impl BitcoinNodeHash {
     /// let left = BitcoinNodeHash::new([0; 32]);
     /// let right = BitcoinNodeHash::new([1; 32]);
     /// let parent = BitcoinNodeHash::parent_hash(&left, &right);
-    /// let expected_parent =
-    ///     BitcoinNodeHash::from_str("34e33ca0c40b7bd33d28932ca9e35170def7309a3bf91ecda5e1ceb067548a12")
-    ///         .unwrap();
+    /// let expected_parent = BitcoinNodeHash::from_str(
+    ///     "34e33ca0c40b7bd33d28932ca9e35170def7309a3bf91ecda5e1ceb067548a12",
+    /// )
+    /// .unwrap();
     /// assert_eq!(parent, expected_parent);
     /// ```
     pub fn parent_hash(left: &BitcoinNodeHash, right: &BitcoinNodeHash) -> BitcoinNodeHash {
@@ -290,17 +291,19 @@ mod test {
     }
     #[test]
     fn test_hash_from_str() {
-        let hash =
-            BitcoinNodeHash::from_str("6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d")
-                .unwrap();
+        let hash = BitcoinNodeHash::from_str(
+            "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+        )
+        .unwrap();
         assert_eq!(hash, hash_from_u8(0));
     }
     #[test]
     fn test_empty_hash() {
         // Only relevant for tests
-        let hash =
-            BitcoinNodeHash::from_str("0000000000000000000000000000000000000000000000000000000000000000")
-                .unwrap();
+        let hash = BitcoinNodeHash::from_str(
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        )
+        .unwrap();
         assert_eq!(hash, BitcoinNodeHash::empty());
     }
 }

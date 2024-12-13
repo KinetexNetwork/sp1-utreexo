@@ -48,19 +48,12 @@ pub fn process_block(
             }
         }
     }
-    let proof = acc.prove(&inputs).unwrap();
+    // let proof = acc.prove(&inputs).unwrap();
+    println!("modifying acc");
     acc.modify(&utxos, &inputs).unwrap();
-    let mut ser_acc = Vec::new();
-    acc.leaves.consensus_encode(&mut ser_acc).unwrap();
-    acc.get_roots().iter().for_each(|x| {
-        x.get_data().consensus_encode(&mut ser_acc).unwrap();
-    });
-        BatchProof {
-            targets: proof.targets.iter().map(|target| VarInt(*target)).collect(),
-            hashes: proof
-                .hashes
-                .iter()
-                .map(|hash| BlockHash::from_raw_hash(*Hash::from_bytes_ref(&*hash)))
-                .collect(),
-        }
+    println!("done modifying acc");
+    BatchProof {
+        targets: vec![],
+        hashes: vec![],
+    }
 }

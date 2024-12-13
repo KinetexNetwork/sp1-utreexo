@@ -89,7 +89,11 @@ pub fn left_sibling(position: u64) -> u64 {
 }
 // roots_to_destroy returns the empty roots that get written over after num_adds
 // amount of leaves have been added.
-pub fn roots_to_destroy(num_adds: u64, mut num_leaves: u64, orig_roots: &[BitcoinNodeHash]) -> Vec<u64> {
+pub fn roots_to_destroy(
+    num_adds: u64,
+    mut num_leaves: u64,
+    orig_roots: &[BitcoinNodeHash],
+) -> Vec<u64> {
     let mut roots = orig_roots.to_vec();
     let mut deleted = vec![];
     let mut h = 0;

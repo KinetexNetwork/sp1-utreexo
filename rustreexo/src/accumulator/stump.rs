@@ -381,12 +381,12 @@ mod test {
             let del_hashes = data
                 .del_hashes
                 .iter()
-                .map(|hash| NodeHash::from_str(hash).unwrap())
+                .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
                 .collect::<Vec<_>>();
             let proof_hashes = data
                 .proof_hashes
                 .iter()
-                .map(|hash| NodeHash::from_str(hash).unwrap())
+                .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
                 .collect::<Vec<_>>();
             let proof = Proof::new(data.proof_targets, proof_hashes);
             let (_, updated) = stump.modify(&utxos, &del_hashes, &proof).unwrap();
@@ -394,7 +394,7 @@ mod test {
             let new_add_hash: Vec<_> = data
                 .new_add_hash
                 .iter()
-                .map(|hash| NodeHash::from_str(hash).unwrap())
+                .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
                 .collect();
             let new_add: Vec<_> = data
                 .new_add_pos
@@ -405,7 +405,7 @@ mod test {
             let new_del_hash: Vec<_> = data
                 .new_del_hashes
                 .iter()
-                .map(|hash| NodeHash::from_str(hash).unwrap())
+                .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
                 .collect();
             let new_del: Vec<_> = data
                 .new_del_pos
@@ -442,7 +442,7 @@ mod test {
             "df46b17be5f66f0750a4b3efa26d4679db170a72d41eb56c3e4ff75a58c65386",
         ]
         .iter()
-        .map(|hash| NodeHash::from_str(hash).unwrap())
+        .map(|hash| BitcoinNodeHash::from_str(hash).unwrap())
         .collect();
 
         let positions: Vec<_> = positions.into_iter().zip(hashes).collect();
@@ -481,7 +481,9 @@ mod test {
             .proofhashes
             .unwrap_or_default()
             .into_iter()
-            .map(|hash| NodeHash::from_str(hash.as_str()).expect("Test case hashes are valid"))
+            .map(|hash| {
+                BitcoinNodeHash::from_str(hash.as_str()).expect("Test case hashes are valid")
+            })
             .collect::<Vec<_>>();
 
         let proof = Proof::new(case.target_values.unwrap(), proof_hashes);
@@ -489,8 +491,10 @@ mod test {
         let roots = case
             .expected_roots
             .into_iter()
-            .map(|hash| NodeHash::from_str(hash.as_str()).expect("Test case hashes are valid"))
-            .collect::<Vec<NodeHash>>();
+            .map(|hash| {
+                BitcoinNodeHash::from_str(hash.as_str()).expect("Test case hashes are valid")
+            })
+            .collect::<Vec<BitcoinNodeHash>>();
 
         let (stump, _) = Stump::new()
             .modify(&leaf_hashes, &[], &Proof::default())
@@ -555,7 +559,7 @@ mod test {
     fn test_serialize() {
         let hashes = [0, 1, 2, 3, 4, 5, 6, 7]
             .iter()
-            .map(|&el| NodeHash::from([el; 32]))
+            .map(|&el| BitcoinNodeHash::from([el; 32]))
             .collect::<Vec<_>>();
         let (stump, _) = Stump::new()
             .modify(&hashes, &[], &Proof::default())

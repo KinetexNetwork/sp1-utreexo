@@ -6,6 +6,12 @@
 //! uses a channel to receive requests and sends responses through a oneshot channel, provided
 //! by the request sender. Maybe there is a better way to do this, but this is a TODO for later.
 use std::collections::HashMap;
+use std::fs;
+use std::fs::File;
+use std::io::BufWriter;
+use std::io::Write;
+use std::io::{self};
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
@@ -33,22 +39,16 @@ use rustreexo::accumulator::proof::Proof;
 use rustreexo::accumulator::stump::Stump;
 use serde::Deserialize;
 use serde::Serialize;
-
 use serde_json::to_writer_pretty;
-
-use std::fs::File;
-use std::io::{self, Write, BufWriter};
-use std::fs;
-use std::path::Path;
 
 use crate::block_index::BlockIndex;
 use crate::block_index::BlocksIndex;
 use crate::chaininterface::Blockchain;
 use crate::chainview;
+use crate::udata::CompactLeafData;
 use crate::udata::LeafContext;
 use crate::udata::LeafData;
 use crate::udata::UtreexoBlock;
-use crate::udata::CompactLeafData;
 
 #[cfg(not(feature = "shinigami"))]
 pub type AccumulatorHash = rustreexo::accumulator::node_hash::BitcoinNodeHash;
@@ -499,26 +499,30 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
     }
 
     /// Processes a block and returns the batch proof and the compact leaf data for the block.
-    fn process_block(
-        &mut self,
-        block: &Block,
-        height: u32,
-        mtp: u32,
-    ) -> (Proof, Vec<LeafContext>) {
-
+    fn process_block(&mut self, block: &Block, height: u32, mtp: u32) -> (Proof, Vec<LeafContext>) {
         let tx_count = block.txdata.len();
-        let is_interesting = !Path::new(format!("acc-datas/block-{}txs", tx_count).as_str()).exists();
+        let is_interesting =
+            !Path::new(format!("acc-datas/block-{}txs", tx_count).as_str()).exists();
         if is_interesting {
             fs::create_dir(format!("acc-datas/block-{}txs", tx_count).as_str()).unwrap()
         }
-    
+
         if is_interesting {
-            let mut file = File::create(format!("acc-datas/block-{tx_count}txs/block.txt")).unwrap();
-            writeln!(file, "{:#?}", block).unwrap();
+            let mut file =
+                File::create(format!("acc-datas/block-{tx_count}txs/block.txt")).unwrap();
+            let serialized_block = bitcoin::consensus::serialize(block);
+            file.write_all(&serialized_block).unwrap();
             file.flush().unwrap();
         }
         if is_interesting {
-            let file = File::create(format!("acc-datas/block-{tx_count}txs/acc-beffore.txt")).unwrap();
+            let mut file = 
+                File::create(format!("acc-datas/block-{tx_count}txs/block-height.txt")).unwrap();
+            writeln!(file, "{:#?}", height).unwrap();
+            file.flush().unwrap();
+        }
+        if is_interesting {
+            let file =
+                File::create(format!("acc-datas/block-{tx_count}txs/acc-beffore.txt")).unwrap();
             let acc_cloned = self.acc.clone();
             acc_cloned.serialize(file).unwrap();
         }
@@ -590,14 +594,21 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         self.view.save_acc(ser_acc, block.block_hash());
 
         if is_interesting {
-            let leafs_pairs = input_leaf_hashes.iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>();
-            let file = File::create(format!("acc-datas/block-{tx_count}txs/input-leaf-hashes.txt")).unwrap();
+            let leafs_pairs = input_leaf_hashes
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect::<Vec<_>>();
+            let file = File::create(format!(
+                "acc-datas/block-{tx_count}txs/input-leaf-hashes.txt"
+            ))
+            .unwrap();
             let writer = BufWriter::new(file);
             to_writer_pretty(writer, &leafs_pairs).unwrap();
         }
-    
-        if is_interesting{
-            let file = File::create(format!("acc-datas/block-{tx_count}txs/acc-after.txt")).unwrap();
+
+        if is_interesting {
+            let file =
+                File::create(format!("acc-datas/block-{tx_count}txs/acc-after.txt")).unwrap();
             let acc_cloned = self.acc.clone();
             acc_cloned.serialize(file).unwrap();
         }
@@ -605,7 +616,6 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         (proof, compact_leaves)
     }
 }
-
 
 #[cfg(feature = "api")]
 /// All requests we can send to the prover. The prover will respond with the corresponding

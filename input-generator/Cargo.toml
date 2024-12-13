@@ -1,0 +1,22 @@
+[package]
+name = "input-generator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+alloy-sol-types = "0.8.7"
+hex = "0.4.3"
+rustreexo = { path = "../rustreexo", features = ["with-serde"] }
+bitcoin = { git = "https://github.com/KinetexNetwork/rust-bitcoin", branch = "0.32.x", features = ["serde"] }
+reqwest = { version = "0.12.8", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4.0", features = ["derive", "env"] }
+regex = "1.7"
+lazy_static = "1.4"
+phf = "0.11.2"
+bincode = "1.3.3"
+bitcoin_hashes ={ version = "0.14", features = ["serde"] }
+sha2 = "0.10.6"
+esplora-client = "0.11.0"

@@ -34,7 +34,9 @@ use std::io::Read;
 use std::io::Write;
 use std::rc::Rc;
 use std::rc::Weak;
-use serde::{Deserialize, Serialize};
+
+use serde::Deserialize;
+use serde::Serialize;
 
 use super::node_hash::BitcoinNodeHash;
 use super::proof::Proof;
@@ -52,6 +54,9 @@ use super::util::tree_rows;
 enum NodeType {
     Branch,
     Leaf,
+    BranchLeftOnly,
+    BranchRightOnly,
+    BranchNoChildren,
 }
 
 /// A forest node that can either be a leaf or a branch.
@@ -71,15 +76,30 @@ pub struct Node {
     pub used: Cell<bool>,
 }
 
+impl std::hash::Hash for Node {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.data.get().hash(state);
+    }
+}
 
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        self.data.get() == other.data.get()
+    }
+}
 
+impl Eq for Node {
+    fn assert_receiver_is_total_eq(&self) {
+        self.data.get().assert_receiver_is_total_eq();
+    }
+}
 
+use std::io::Cursor;
 
 use serde::de::Deserializer;
-use serde::de::{self, Visitor};
-use std::io::Cursor;
+use serde::de::Visitor;
+use serde::de::{self};
 use serde::ser::Serializer;
-
 
 impl Serialize for Pollard {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -88,10 +108,11 @@ impl Serialize for Pollard {
     {
         // Create a buffer to hold the serialized bytes
         let mut buffer = Vec::new();
-        
+
         // Use your existing serialize method to write into the buffer
-        self.serialize(&mut buffer).map_err(|err| serde::ser::Error::custom(err.to_string()))?;
-        
+        self.serialize(&mut buffer)
+            .map_err(|err| serde::ser::Error::custom(err.to_string()))?;
+
         // Depending on the format, serialize the bytes appropriately
 
         // For binary formats (e.g., bincode)
@@ -141,7 +162,6 @@ impl<'de> Deserialize<'de> for Pollard {
     }
 }
 
-
 impl Node {
     /// Recomputes the hash of all nodes, up to the root.
     fn recompute_hashes(&self) {
@@ -149,8 +169,10 @@ impl Node {
         let right = self.right.borrow();
 
         if let (Some(left), Some(right)) = (left.as_deref(), right.as_deref()) {
-            self.data
-                .replace(BitcoinNodeHash::parent_hash(&left.data.get(), &right.data.get()));
+            self.data.replace(BitcoinNodeHash::parent_hash(
+                &left.data.get(),
+                &right.data.get(),
+            ));
         }
         if let Some(ref parent) = *self.parent.borrow() {
             if let Some(p) = parent.upgrade() {
@@ -192,22 +214,48 @@ impl Node {
     /// The primary use of this method is to serialize the accumulator. In this case,
     /// you should call this method on each root in the forest.
     pub fn write_one<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        match self.ty {
+        println!("\n Write one");
+        println!("self.data = {:#?}", &self.get_data());
+        println!("self.used = {:?}", &self.used.get());
+
+        let mut self_copy = self.clone();
+
+        if self.ty == NodeType::Branch {
+            if self.left.borrow().is_none() {
+                self_copy.ty = NodeType::BranchRightOnly;
+            }
+            if self.right.borrow().is_none() {
+                self_copy.ty = NodeType::BranchLeftOnly;
+            }
+            if self.left.borrow().is_none() && self.right.borrow().is_none() {
+                self_copy.ty = NodeType::BranchNoChildren;
+            }
+        }
+
+        match self_copy.ty {
             NodeType::Branch => writer.write_all(&0_u64.to_le_bytes())?,
             NodeType::Leaf => writer.write_all(&1_u64.to_le_bytes())?,
+            NodeType::BranchLeftOnly => writer.write_all(&2_u64.to_le_bytes())?,
+            NodeType::BranchRightOnly => writer.write_all(&3_u64.to_le_bytes())?,
+            NodeType::BranchNoChildren => writer.write_all(&4_u64.to_le_bytes())?,
         }
-        self.data.get().write(writer)?;
-        self.left
-            .borrow()
-            .as_ref()
-            .map(|l| l.write_one(writer))
-            .transpose()?;
+        self_copy.data.get().write(writer)?;
 
-        self.right
-            .borrow()
-            .as_ref()
-            .map(|r| r.write_one(writer))
-            .transpose()?;
+        if self_copy.ty != NodeType::BranchRightOnly {
+            self.left
+                .borrow()
+                .as_ref()
+                .map(|l| l.write_one(writer))
+                .transpose()?;
+        }
+
+        if self_copy.ty != NodeType::BranchLeftOnly {
+            self.right
+                .borrow()
+                .as_ref()
+                .map(|r| r.write_one(writer))
+                .transpose()?;
+        }
         Ok(())
     }
     /// Reads one node from the reader, this method will recursively read all children.
@@ -224,12 +272,17 @@ impl Node {
             index: &mut HashMap<BitcoinNodeHash, Weak<Node>>,
         ) -> std::io::Result<Rc<Node>> {
             let mut ty = [0u8; 8];
+            println!("Reading node");
             reader.read_exact(&mut ty)?;
+            println!("Read type");
             let data = BitcoinNodeHash::read(reader)?;
 
             let ty = match u64::from_le_bytes(ty) {
                 0 => NodeType::Branch,
                 1 => NodeType::Leaf,
+                2 => NodeType::BranchLeftOnly,
+                3 => NodeType::BranchRightOnly,
+                4 => NodeType::BranchNoChildren,
                 _ => panic!("Invalid node type"),
             };
             if ty == NodeType::Leaf {
@@ -253,22 +306,36 @@ impl Node {
                 used: Cell::new(false),
             });
             if !data.is_empty() {
-                let left = _read_one(Some(node.clone()), reader, index)?;
-                let right = _read_one(Some(node.clone()), reader, index)?;
-                node.left.replace(Some(left));
-                node.right.replace(Some(right));
-            }
-            node.left
-                .borrow()
-                .as_ref()
-                .map(|l| l.parent.replace(Some(Rc::downgrade(&node))));
-            node.right
-                .borrow()
-                .as_ref()
-                .map(|r| r.parent.replace(Some(Rc::downgrade(&node))));
+                if ty != NodeType::BranchRightOnly && ty != NodeType::BranchNoChildren {
+                    let left = _read_one(Some(node.clone()), reader, index)?;
+                    node.left.replace(Some(left));
+                } else {
+                    node.left.replace(None);
+                }
+                if ty != NodeType::BranchLeftOnly && ty != NodeType::BranchNoChildren {
+                    let right = _read_one(Some(node.clone()), reader, index)?;
 
+                    node.right.replace(Some(right));
+                } else {
+                    node.right.replace(None);
+                }
+            }
+
+            if node.left.borrow().is_some() {
+                node.left
+                    .borrow()
+                    .as_ref()
+                    .map(|l| l.parent.replace(Some(Rc::downgrade(&node))));
+            }
+            if node.right.borrow().is_some() {
+                node.right
+                    .borrow()
+                    .as_ref()
+                    .map(|r| r.parent.replace(Some(Rc::downgrade(&node))));
+            }
             Ok(node)
         }
+
         let mut index = HashMap::new();
         let root = _read_one(None, reader, &mut index)?;
         Ok((root, index))
@@ -329,9 +396,11 @@ impl Pollard {
     pub fn get_stripped_pollard(&self) -> Pollard {
         let mut new_roots: Vec<Rc<Node>> = Default::default();
         for root in self.roots.iter() {
-            let mut new_root = root.as_ref().clone();
-            new_root.strip_unused();
-            new_roots.push(Rc::new(new_root));
+            if root.used.get() {
+                let mut new_root = root.as_ref().clone();
+                new_root.strip_unused();
+                new_roots.push(Rc::new(new_root));
+            }
         }
         let new_leaves: u64 = 0; // TODO: Am I sure we don't need it??
 
@@ -348,6 +417,261 @@ impl Pollard {
             map: new_map,
             roots: new_roots,
             leaves: new_leaves,
+        }
+    }
+
+    /// Returns a pollard with same nodes but flags setted according to modify
+    pub fn fake_modify(&mut self, add: &[BitcoinNodeHash], del: &[BitcoinNodeHash]) -> Pollard {
+        let new_pollard = self.clone();
+        let link_map = self.link_pollards(&new_pollard);
+        self.fake_del(del, &link_map);
+        self.fake_add(add, &link_map);
+        new_pollard
+    }
+
+    fn fake_add(&mut self, values: &[BitcoinNodeHash], link_map: &HashMap<Node, Weak<Node>>) {
+        for value in values {
+            self.fake_add_single(*value, link_map);
+        }
+    }
+
+    fn fake_add_single(&mut self, value: BitcoinNodeHash, link_map: &HashMap<Node, Weak<Node>>) {
+        let mut node: Rc<Node> = Rc::new(Node {
+            ty: NodeType::Leaf,
+            parent: RefCell::new(None),
+            data: Cell::new(value),
+            left: RefCell::new(None),
+            right: RefCell::new(None),
+            used: Cell::new(true),
+        });
+        self.map.insert(value, Rc::downgrade(&node));
+        let mut leaves = self.leaves;
+        while leaves & 1 != 0 {
+            let root = self.roots.pop().unwrap();
+            root.used.set(true);
+            match link_map.get(&root) {
+                Some(root_link) => {
+                    root_link.upgrade().unwrap().used.set(true);
+                }
+                None => {}
+            }
+            if root.get_data() == BitcoinNodeHash::empty() {
+                leaves >>= 1;
+                continue;
+            }
+            let new_node = Rc::new(Node {
+                ty: NodeType::Branch,
+                parent: RefCell::new(None),
+                data: Cell::new(BitcoinNodeHash::parent_hash(
+                    &root.data.get(),
+                    &node.data.get(),
+                )),
+                left: RefCell::new(Some(root.clone())),
+                right: RefCell::new(Some(node.clone())),
+                used: Cell::new(true),
+            });
+            root.parent.replace(Some(Rc::downgrade(&new_node)));
+            root.parent
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .upgrade()
+                .unwrap()
+                .used
+                .set(true);
+
+            match link_map.get(&root) {
+                Some(root_link) => {
+                    root_link.upgrade().unwrap().used.set(true);
+                }
+                None => {}
+            }
+
+            node.parent.replace(Some(Rc::downgrade(&new_node)));
+            node.parent
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .upgrade()
+                .unwrap()
+                .used
+                .set(true);
+
+            match link_map.get(&node) {
+                Some(node_link) => {
+                    node_link.upgrade().unwrap().used.set(true);
+                }
+                None => {}
+            }
+
+            node = new_node;
+            leaves >>= 1;
+        }
+        self.roots.push(node);
+        self.leaves += 1;
+    }
+
+    fn fake_del(&mut self, targets: &[BitcoinNodeHash], link_map: &HashMap<Node, Weak<Node>>) {
+        let mut pos = targets
+            .iter()
+            .flat_map(|target| self.map.get(target))
+            .flat_map(|target| target.upgrade())
+            .map(|target| {
+                (
+                    self.fake_get_pos(self.map.get(&target.data.get()).unwrap()),
+                    target.data.get(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        pos.sort();
+        let (_, targets): (Vec<u64>, Vec<BitcoinNodeHash>) = pos.into_iter().unzip();
+        for target in targets {
+            match self.map.remove(&target) {
+                Some(target) => {
+                    let mut tgt = target.upgrade().unwrap().clone().as_ref().clone();
+                    self.fake_del_single(&mut tgt, &link_map);
+                }
+                None => {}
+            }
+        }
+    }
+
+    fn fake_del_single(
+        &mut self,
+        node: &mut Node,
+        link_map: &HashMap<Node, Weak<Node>>,
+    ) -> Option<()> {
+        let parent = node.parent.borrow();
+        // Deleting a root
+        let parent = match *parent {
+            Some(ref node) => node.upgrade()?,
+            None => {
+                let pos = self.roots.iter().position(|x| x.data == node.data).unwrap();
+                self.roots[pos] = Rc::new(Node {
+                    ty: NodeType::Branch,
+                    parent: RefCell::new(None),
+                    data: Cell::new(BitcoinNodeHash::default()),
+                    left: RefCell::new(None),
+                    right: RefCell::new(None),
+                    used: Cell::new(true),
+                });
+                return None;
+            }
+        };
+        parent.used.set(true);
+        match link_map.get(&parent) {
+            Some(parent_link) => {
+                parent_link.upgrade().unwrap().used.set(true);
+            }
+            None => {}
+        }
+        let me = parent.left.borrow();
+        // Can unwrap because we know the sibling exists
+        let sibling = if me.as_deref()?.data == node.data {
+            parent.right.borrow().clone()
+        } else {
+            parent.left.borrow().clone()
+        };
+        if let Some(ref sibling) = sibling {
+            sibling.used.set(true);
+            match link_map.get(&sibling) {
+                Some(sibling_link) => {
+                    sibling_link.upgrade().unwrap().used.set(true);
+                }
+                None => {}
+            }
+            let grandparent = parent.parent.borrow().clone();
+            match grandparent {
+                Some(ref gp) => {
+                    gp.upgrade().unwrap().used.set(true);
+                    let gp_owned = gp.upgrade().unwrap().clone().as_ref().clone();
+                    match link_map.get(&gp_owned) {
+                        Some(gp_link) => {
+                            gp_link.upgrade().unwrap().used.set(true);
+                        }
+                        None => {}
+                    }
+                }
+                None => {}
+            }
+            sibling.parent.replace(grandparent.clone());
+            if let Some(ref grandparent) = grandparent.and_then(|g| g.upgrade()) {
+                if grandparent.left.borrow().clone().as_ref().unwrap().data == parent.data {
+                    grandparent.left.borrow().clone().unwrap().used.set(true);
+                    let gp_left_owned = grandparent
+                        .left
+                        .borrow()
+                        .clone()
+                        .unwrap()
+                        .clone()
+                        .as_ref()
+                        .clone();
+                    match link_map.get(&gp_left_owned) {
+                        Some(gp_left_link) => {
+                            gp_left_link.upgrade().unwrap().used.set(true);
+                        }
+                        None => {}
+                    }
+                    grandparent.left.replace(Some(sibling.clone()));
+                } else {
+                    grandparent.right.borrow().clone().unwrap().used.set(true);
+                    let gp_right_owned = grandparent
+                        .right
+                        .borrow()
+                        .clone()
+                        .unwrap()
+                        .clone()
+                        .as_ref()
+                        .clone();
+                    match link_map.get(&gp_right_owned) {
+                        Some(gp_right_link) => {
+                            gp_right_link.upgrade().unwrap().used.set(true);
+                        }
+                        None => {}
+                    }
+                    grandparent.right.replace(Some(sibling.clone()));
+                }
+                sibling.recompute_hashes();
+            } else {
+                let pos = self
+                    .roots
+                    .iter()
+                    .position(|x| x.data == parent.data)
+                    .unwrap();
+                self.roots[pos] = sibling.clone();
+            }
+        };
+
+        Some(())
+    }
+
+    fn link_pollards(&self, other: &Pollard) -> HashMap<Node, Weak<Node>> {
+        let mut res = HashMap::new();
+        for (self_root, other_root) in self.roots.iter().zip(other.roots.iter()) {
+            Pollard::link_pollards_inner(self_root, other_root, &mut res);
+        }
+        res
+    }
+
+    fn link_pollards_inner(
+        first_root: &Rc<Node>,
+        second_root: &Rc<Node>,
+        res: &mut HashMap<Node, Weak<Node>>,
+    ) {
+        let first_node: Node = first_root.clone().as_ref().clone();
+        res.insert(first_node, Rc::downgrade(second_root));
+
+        if let Some(first_left) = first_root.left.borrow().as_ref() {
+            if let Some(second_left) = second_root.left.borrow().as_ref() {
+                Pollard::link_pollards_inner(first_left, second_left, res);
+            }
+        }
+
+        if let Some(first_right) = first_root.right.borrow().as_ref() {
+            if let Some(second_right) = second_root.right.borrow().as_ref() {
+                Pollard::link_pollards_inner(first_right, second_right, res);
+            }
         }
     }
 
@@ -395,6 +719,8 @@ impl Pollard {
         }
         let leaves = read_u64(&mut reader)?;
         let roots_len = read_u64(&mut reader)?;
+
+        println!("leaves: {}, roots_len: {}", leaves, roots_len);
         let mut roots = Vec::new();
         let mut map = HashMap::new();
         for _ in 0..roots_len {
@@ -439,6 +765,22 @@ impl Pollard {
             .collect::<Vec<_>>();
         Ok(Proof::new(positions, proof))
     }
+
+    /// Returns nothing and sets used flag to true for all nodes used in prove function.
+    pub fn fake_prove(&mut self, targets: &[BitcoinNodeHash]) -> () {
+        let mut positions = Vec::new();
+        for target in targets {
+            let node = self.map.get(target).unwrap();
+            node.upgrade().unwrap().used.set(true);
+            let position = self.get_pos(node);
+            positions.push(position);
+        }
+        let needed = get_proof_positions(&positions, self.leaves, tree_rows(self.leaves));
+        let proof = needed
+            .iter()
+            .map(|pos| self.get_hash(*pos).unwrap())
+            .collect::<Vec<_>>();
+    } 
     /// Returns a reference to the roots in this Pollard.
     pub fn get_roots(&self) -> &[Rc<Node>] {
         &self.roots
@@ -475,7 +817,11 @@ impl Pollard {
     ///     String::from("b151a956139bb821d4effa34ea95c17560e0135d1e4661fc23cedc3af49dac42")
     /// );
     /// ```
-    pub fn modify(&mut self, add: &[BitcoinNodeHash], del: &[BitcoinNodeHash]) -> Result<(), String> {
+    pub fn modify(
+        &mut self,
+        add: &[BitcoinNodeHash],
+        del: &[BitcoinNodeHash],
+    ) -> Result<(), String> {
         self.del(del)?;
         self.add(add);
         Ok(())
@@ -549,6 +895,68 @@ impl Pollard {
             .collect::<Vec<_>>();
         proof.verify(del_hashes, &roots, self.leaves)
     }
+    /// Can return wrong pos but sets flags
+    pub fn fake_get_pos(&self, node: &Weak<Node>) -> u64 {
+        // This indicates whether the node is a left or right child at each level
+        // When we go down the tree, we can use the indicator to know which
+        // child to take.
+        let mut left_child_indicator = 0_u64;
+        let mut rows_to_top = 0;
+        let mut node = node.upgrade().unwrap();
+        node.used.set(true);
+        while let Some(parent) = node.parent.clone().into_inner() {
+            node.parent.borrow().as_ref().unwrap().upgrade().unwrap().used.set(true);
+            let parent_left = parent
+                .upgrade()
+                .and_then(|parent| parent.left.clone().into_inner())
+                .unwrap()
+                .clone();
+            parent_left.used.set(true);
+
+            // If the current node is a left child, we left-shift the indicator
+            // and leave the LSB as 0
+            if parent_left.get_data() == node.get_data() {
+                left_child_indicator <<= 1;
+            } else {
+                // If the current node is a right child, we left-shift the indicator
+                // and set the LSB to 1
+                left_child_indicator <<= 1;
+                left_child_indicator |= 1;
+            }
+            rows_to_top += 1;
+            node = parent.upgrade().unwrap();
+        }
+        let mut root_idx = self.roots.len() - 1;
+        let forest_rows = tree_rows(self.leaves);
+        let mut root_row = 0;
+        // Find the root of the tree that the node belongs to
+        for row in 0..forest_rows {
+            if is_root_populated(row, self.leaves) {
+                let root = &self.roots[root_idx];
+                if root.get_data() == node.get_data() {
+                    root_row = row;
+                    break;
+                }
+                root_idx -= 1;
+            }
+        }
+        let mut pos = root_position(self.leaves, root_row, forest_rows);
+        for _ in 0..rows_to_top {
+            // If LSB is 0, go left, otherwise go right
+            match left_child_indicator & 1 {
+                0 => {
+                    pos = left_child(pos, forest_rows);
+                }
+                1 => {
+                    pos = right_child(pos, forest_rows);
+                }
+                _ => unreachable!(),
+            }
+            left_child_indicator >>= 1;
+        }
+        pos
+    }
+
     fn get_pos(&self, node: &Weak<Node>) -> u64 {
         // This indicates whether the node is a left or right child at each level
         // When we go down the tree, we can use the indicator to know which
@@ -608,7 +1016,7 @@ impl Pollard {
     }
     fn del_single(&mut self, node: &mut Node) -> Option<()> {
         let parent = node.parent.borrow();
-        
+
         // Deleting a root
         let parent = match *parent {
             Some(ref node) => node.upgrade()?,
@@ -639,15 +1047,13 @@ impl Pollard {
             sibling.used.set(true);
 
             let grandparent = parent.parent.borrow().clone();
-            
+
             match grandparent {
                 Some(ref gp) => {
                     gp.upgrade().unwrap().used.set(true);
                 }
                 None => {}
             }
-
-
 
             sibling.parent.replace(grandparent.clone());
 
@@ -693,15 +1099,32 @@ impl Pollard {
             let new_node = Rc::new(Node {
                 ty: NodeType::Branch,
                 parent: RefCell::new(None),
-                data: Cell::new(BitcoinNodeHash::parent_hash(&root.data.get(), &node.data.get())),
+                data: Cell::new(BitcoinNodeHash::parent_hash(
+                    &root.data.get(),
+                    &node.data.get(),
+                )),
                 left: RefCell::new(Some(root.clone())),
                 right: RefCell::new(Some(node.clone())),
                 used: Cell::new(true),
             });
             root.parent.replace(Some(Rc::downgrade(&new_node)));
-            root.parent.borrow().as_ref().unwrap().upgrade().unwrap().used.set(true);
+            root.parent
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .upgrade()
+                .unwrap()
+                .used
+                .set(true);
             node.parent.replace(Some(Rc::downgrade(&new_node)));
-            node.parent.borrow().as_ref().unwrap().upgrade().unwrap().used.set(true);
+            node.parent
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .upgrade()
+                .unwrap()
+                .used
+                .set(true);
 
             node = new_node;
             leaves >>= 1;
@@ -781,18 +1204,6 @@ impl Pollard {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 impl Debug for Pollard {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "{}", self.string())
@@ -813,14 +1224,13 @@ mod test {
     use bitcoin_hashes::sha256::Hash as Data;
     use bitcoin_hashes::Hash;
     use bitcoin_hashes::HashEngine;
+    use serde::de::DeserializeOwned;
     use serde::Deserialize;
 
     use super::Pollard;
     use crate::accumulator::node_hash::BitcoinNodeHash;
     use crate::accumulator::pollard::Node;
     use crate::accumulator::proof::Proof;
-
-    use serde::de::DeserializeOwned;
 
     fn hash_from_u8(value: u8) -> BitcoinNodeHash {
         let mut engine = Data::engine();
@@ -837,12 +1247,14 @@ mod test {
         let mut p = Pollard::new();
         p.modify(&hashes, &[]).expect("Pollard should not fail");
         let (found_target, found_sibling, _) = p.grab_node(4).unwrap();
-        let target =
-            BitcoinNodeHash::try_from("e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71")
-                .unwrap();
-        let sibling =
-            BitcoinNodeHash::try_from("e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db")
-                .unwrap();
+        let target = BitcoinNodeHash::try_from(
+            "e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71",
+        )
+        .unwrap();
+        let sibling = BitcoinNodeHash::try_from(
+            "e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db",
+        )
+        .unwrap();
 
         assert_eq!(target, found_target.data.get());
         assert_eq!(sibling, found_sibling.data.get());
@@ -918,8 +1330,6 @@ mod test {
         // }
         let stripped = p.get_stripped_pollard();
 
-        
-
         // let mut count = 0;
         // let mut used_count = 0;
         // for (_hash, wnode) in stripped.map {
@@ -932,10 +1342,7 @@ mod test {
 
         let serialized_p = bincode::serialize(&stripped).unwrap();
         println!("Stripped Pollard size: {}", serialized_p.len());
-
-        
     }
-
 
     #[test]
     fn test_delete_non_root() {
@@ -1191,6 +1598,35 @@ mod test {
         assert_eq!(deserialized.leaves, 16);
     }
 
+    #[test]
+    fn test_serialization_roundtrip2() {
+        let mut p = Pollard::new();
+        let values = vec![1, 2, 3, 4, 5];
+        let hashes: Vec<BitcoinNodeHash> = values
+            .into_iter()
+            .map(|i| BitcoinNodeHash::from([i; 32]))
+            .collect();
+
+        p.modify(&hashes, &[]);
+
+        println!("{:#?}", p);
+
+        p.restore_used_flag();
+
+        let markuped = p.fake_modify(&[BitcoinNodeHash::from(&[1 as u8; 32])], &[]);
+
+        for root in markuped.get_roots() {
+            println!("Root used? - {:#?}", root.used.get());
+        }
+
+        let stripped = markuped.get_stripped_pollard();
+
+        println!("\n\n{:#?}", stripped);
+
+        // let mut serialized = Vec::<u8>::new();
+        // p.serialize(&mut serialized).expect("serialize should work");
+        // let deserialized = Pollard::deserialize(&*serialized).expect("deserialize should work");
+    }
 
     #[test]
     fn test_is_pollard_deserialize_owned() {
@@ -1200,8 +1636,10 @@ mod test {
     #[test]
     fn test_bincode_serialization() {
         let hashes = get_hash_vec_of(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
-        let mut pollard  = Pollard::new();
-        pollard.modify(&hashes, &[]).expect("Test pollards are valid");
+        let mut pollard = Pollard::new();
+        pollard
+            .modify(&hashes, &[])
+            .expect("Test pollards are valid");
         // Serialize with bincode
         let binary_data = bincode::serialize(&pollard).expect("Serialization failed");
 
@@ -1223,12 +1661,11 @@ mod test {
         let acc = Pollard::new();
         let _ = deserialize_owned_need_foo(acc);
     }
-    
+
     fn deserialize_owned_need_foo<T>(acc: T) -> Result<T, u32>
     where
         T: DeserializeOwned,
     {
         Ok(acc)
     }
-    
 }
