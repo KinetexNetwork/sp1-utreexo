@@ -12,6 +12,13 @@ This project aims to implement SP-1 powered zk-circuit for updating a utreexo ac
 Project is WIP, and we don't have all components working together yet. However, we already can manually run the `server` and run `circuit` with prepared data.
 
 
+## How to run
+
+From very high level there are two steps:
+- run `server` following server/README.md and wait it to start processing blocks (it should be around a minute)
+- run `python3 run-end-to-end.py` from the root of the project
+
+
 ## Aknowledgements
 `server` and `rustreexo` are based on the work of Davidson-Souza and mit-dci:
 https://github.com/mit-dci/rustreexo
