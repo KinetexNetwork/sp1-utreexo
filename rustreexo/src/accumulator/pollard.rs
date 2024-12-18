@@ -26,7 +26,7 @@
 use core::fmt;
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -74,6 +74,16 @@ pub struct Node {
     right: RefCell<Option<Rc<Node>>>,
     /// Helper flag for zkutreexo project. Shows if node was used in utreexo mutations.
     pub used: Cell<bool>,
+}
+impl PartialOrd for Node {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.data.get().partial_cmp(&other.data.get())
+    }
+}
+impl Ord for Node {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.data.get().cmp(&other.data.get())
+    }
 }
 
 impl std::hash::Hash for Node {
@@ -265,11 +275,11 @@ impl Node {
     #[allow(clippy::type_complexity)]
     pub fn read_one<R: std::io::Read>(
         reader: &mut R,
-    ) -> std::io::Result<(Rc<Node>, HashMap<BitcoinNodeHash, Weak<Node>>)> {
+    ) -> std::io::Result<(Rc<Node>, BTreeMap<BitcoinNodeHash, Weak<Node>>)> {
         fn _read_one<R: std::io::Read>(
             ancestor: Option<Rc<Node>>,
             reader: &mut R,
-            index: &mut HashMap<BitcoinNodeHash, Weak<Node>>,
+            index: &mut BTreeMap<BitcoinNodeHash, Weak<Node>>,
         ) -> std::io::Result<Rc<Node>> {
             let mut ty = [0u8; 8];
             println!("Reading node");
@@ -336,7 +346,7 @@ impl Node {
             Ok(node)
         }
 
-        let mut index = HashMap::new();
+        let mut index = BTreeMap::new();
         let root = _read_one(None, reader, &mut index)?;
         Ok((root, index))
     }
@@ -363,7 +373,7 @@ pub struct Pollard {
     pub leaves: u64,
     /// A map of all nodes in the forest, indexed by their hash, this is used to lookup
     /// leaves when proving membership.
-    map: HashMap<BitcoinNodeHash, Weak<Node>>,
+    map: BTreeMap<BitcoinNodeHash, Weak<Node>>,
 }
 impl Pollard {
     /// Creates a new empty [Pollard].
@@ -374,7 +384,7 @@ impl Pollard {
     /// ```
     pub fn new() -> Pollard {
         Pollard {
-            map: HashMap::new(),
+            map: BTreeMap::new(),
             roots: Vec::new(),
             leaves: 0,
         }
@@ -394,6 +404,9 @@ impl Pollard {
 
     /// Returns version of pollard where all unused nodes are removed
     pub fn get_stripped_pollard(&self) -> Pollard {
+        for root in &self.roots {
+            root.used.set(true);
+        }
         let mut new_roots: Vec<Rc<Node>> = Default::default();
         for root in self.roots.iter() {
             if root.used.get() {
@@ -404,7 +417,7 @@ impl Pollard {
         }
         let new_leaves: u64 = 0; // TODO: Am I sure we don't need it??
 
-        let mut new_map: HashMap<BitcoinNodeHash, Weak<Node>> = Default::default();
+        let mut new_map: BTreeMap<BitcoinNodeHash, Weak<Node>> = Default::default();
 
         for (_hash, wnode) in &self.map {
             if let Some(rc_node) = wnode.upgrade() {
@@ -429,13 +442,13 @@ impl Pollard {
         new_pollard
     }
 
-    fn fake_add(&mut self, values: &[BitcoinNodeHash], link_map: &HashMap<Node, Weak<Node>>) {
+    fn fake_add(&mut self, values: &[BitcoinNodeHash], link_map: &BTreeMap<Node, Weak<Node>>) {
         for value in values {
             self.fake_add_single(*value, link_map);
         }
     }
 
-    fn fake_add_single(&mut self, value: BitcoinNodeHash, link_map: &HashMap<Node, Weak<Node>>) {
+    fn fake_add_single(&mut self, value: BitcoinNodeHash, link_map: &BTreeMap<Node, Weak<Node>>) {
         let mut node: Rc<Node> = Rc::new(Node {
             ty: NodeType::Leaf,
             parent: RefCell::new(None),
@@ -511,7 +524,7 @@ impl Pollard {
         self.leaves += 1;
     }
 
-    fn fake_del(&mut self, targets: &[BitcoinNodeHash], link_map: &HashMap<Node, Weak<Node>>) {
+    fn fake_del(&mut self, targets: &[BitcoinNodeHash], link_map: &BTreeMap<Node, Weak<Node>>) {
         let mut pos = targets
             .iter()
             .flat_map(|target| self.map.get(target))
@@ -540,7 +553,7 @@ impl Pollard {
     fn fake_del_single(
         &mut self,
         node: &mut Node,
-        link_map: &HashMap<Node, Weak<Node>>,
+        link_map: &BTreeMap<Node, Weak<Node>>,
     ) -> Option<()> {
         let parent = node.parent.borrow();
         // Deleting a root
@@ -646,8 +659,8 @@ impl Pollard {
         Some(())
     }
 
-    fn link_pollards(&self, other: &Pollard) -> HashMap<Node, Weak<Node>> {
-        let mut res = HashMap::new();
+    fn link_pollards(&self, other: &Pollard) -> BTreeMap<Node, Weak<Node>> {
+        let mut res = BTreeMap::new();
         for (self_root, other_root) in self.roots.iter().zip(other.roots.iter()) {
             Pollard::link_pollards_inner(self_root, other_root, &mut res);
         }
@@ -657,7 +670,7 @@ impl Pollard {
     fn link_pollards_inner(
         first_root: &Rc<Node>,
         second_root: &Rc<Node>,
-        res: &mut HashMap<Node, Weak<Node>>,
+        res: &mut BTreeMap<Node, Weak<Node>>,
     ) {
         let first_node: Node = first_root.clone().as_ref().clone();
         res.insert(first_node, Rc::downgrade(second_root));
@@ -722,7 +735,7 @@ impl Pollard {
 
         println!("leaves: {}, roots_len: {}", leaves, roots_len);
         let mut roots = Vec::new();
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         for _ in 0..roots_len {
             let (root, _map) = Node::read_one(&mut reader)?;
             map.extend(_map);

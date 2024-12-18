@@ -218,6 +218,8 @@ impl BitcoinNodeHash {
     /// assert_eq!(parent, expected_parent);
     /// ```
     pub fn parent_hash(left: &BitcoinNodeHash, right: &BitcoinNodeHash) -> BitcoinNodeHash {
+        
+        println!("parent hash called");
         let mut hash = sha512_256::Hash::engine();
         hash.input(&**left);
         hash.input(&**right);

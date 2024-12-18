@@ -92,6 +92,12 @@ async fn get_block(height: u32) -> Result<Block, Box<dyn Error>> {
 fn get_output_bytes(path: &str) -> Vec<u8> {
     let acc_file = File::open(path).unwrap();
     let acc_after = Pollard::deserialize(acc_file).unwrap();
+
+    println!(
+        "acc after roots len = {}, path = {}",
+        acc_after.get_roots().len(),
+        path
+    );
     let acc_roots: Vec<BitcoinNodeHash> = acc_after
         .get_roots()
         .to_vec()
@@ -255,8 +261,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let expected_bytes = get_output_bytes(&acc_after_path);
             let unexpected_bytes = get_output_bytes(&acc_before_path);
             // Since we provide redused pollard it's roots will be different.
-            // assert_ne!(actual_bytes, unexpected_bytes);
-            // assert_eq!(actual_bytes, expected_bytes);
+            assert_ne!(actual_bytes, unexpected_bytes);
+            assert_eq!(actual_bytes, expected_bytes);
             println!("Succesfully executed. Generating report.");
 
             let cycles = public_values.1.total_instruction_count();

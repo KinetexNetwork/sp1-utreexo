@@ -98,23 +98,26 @@ def run_circuit(txnum: int) -> Result:
 
 
 def print_report(txnum: int) -> None:
-    report_path = f"circuit/metrics-cycles-new/{txnum}.json"
-    baseline_path = f"circuit/metrics-cycles/{txnum}.json"
-    with open(report_path, "r") as report_file:
-        with open(baseline_path, "r") as baseline_file:
-            report_json = json.load(report_file)
-            cycles = report_json["total_instructions"]
-            baseline_json = json.load(baseline_file)
-            baseline_cycles = baseline_json["total_instructions"]
-            improvement = baseline_cycles / cycles
-            improvement_color = RED if improvement < 1 else YELLOW if improvement < 10 else GREEN if improvement < 100 else BLUE
-            print(f"TxNum = {txnum}; Cycles = {cycles}; Baseline Cycles = {baseline_cycles}; {improvement_color} Improvement = {improvement} times {DEFAULT_COLOR}")
-            IMPROVEMENTS.append(improvement)
-            avg_improvement = sum(IMPROVEMENTS) / len(IMPROVEMENTS)
-            avg_improvement_color = RED if avg_improvement < 1 else YELLOW if avg_improvement < 10 else GREEN if avg_improvement < 100 else BLUE
-            print(f"{avg_improvement_color}Average improvement atm = {avg_improvement} {DEFAULT_COLOR}")
-            CYCLES.append(cycles)
-            BASELINE_CYCLES.append(baseline_cycles)
+    try:
+        report_path = f"circuit/metrics-cycles-new/{txnum}.json"
+        baseline_path = f"circuit/metrics-cycles/{txnum}.json"
+        with open(report_path, "r") as report_file:
+            with open(baseline_path, "r") as baseline_file:
+                report_json = json.load(report_file)
+                cycles = report_json["total_instructions"]
+                baseline_json = json.load(baseline_file)
+                baseline_cycles = baseline_json["total_instructions"]
+                improvement = baseline_cycles / cycles
+                improvement_color = RED if improvement < 1 else YELLOW if improvement < 10 else GREEN if improvement < 100 else BLUE
+                print(f"TxNum = {txnum}; Cycles = {cycles}; Baseline Cycles = {baseline_cycles}; {improvement_color} Improvement = {improvement} times {DEFAULT_COLOR}")
+                IMPROVEMENTS.append(improvement)
+                avg_improvement = sum(IMPROVEMENTS) / len(IMPROVEMENTS)
+                avg_improvement_color = RED if avg_improvement < 1 else YELLOW if avg_improvement < 10 else GREEN if avg_improvement < 100 else BLUE
+                print(f"{avg_improvement_color}Average improvement atm = {avg_improvement} {DEFAULT_COLOR}")
+                CYCLES.append(cycles)
+                BASELINE_CYCLES.append(baseline_cycles)
+    except Exception as e:
+        print(f"Failed to write report with error: {e}")
 
 
 

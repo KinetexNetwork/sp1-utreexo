@@ -27,8 +27,12 @@ pub fn main() {
 
     let mut acc = sp1_zkvm::io::read::<Pollard>();
 
+    println!("acc roots before circuit: {:?}", acc.get_roots().len());
+
     let input_leaf_hashes = sp1_zkvm::io::read::<HashMap<TxIn, BitcoinNodeHash>>();
     let _proof = process_block(&block, height, &mut acc, input_leaf_hashes);
+
+    println!("acc roots after circuit: {:?}", acc.get_roots().len());
     let acc_roots: Vec<BitcoinNodeHash> = acc
         .get_roots()
         .to_vec()
