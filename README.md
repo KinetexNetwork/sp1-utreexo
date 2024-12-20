@@ -1,4 +1,4 @@
-# ZK-utreexo
+# sp1-utreexo
 
 This project aims to implement SP-1 powered zk-circuit for updating a utreexo accumulator. Currently, the project have the following components:
 
