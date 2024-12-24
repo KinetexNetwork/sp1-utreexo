@@ -48,10 +48,7 @@ pub fn process_block(
             }
         }
     }
-    // let proof = acc.prove(&inputs).unwrap();
-    println!("modifying acc");
     acc.modify(&utxos, &inputs).unwrap();
-    println!("done modifying acc");
     BatchProof {
         targets: vec![],
         hashes: vec![],

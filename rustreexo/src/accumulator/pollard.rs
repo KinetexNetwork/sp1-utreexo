@@ -224,10 +224,6 @@ impl Node {
     /// The primary use of this method is to serialize the accumulator. In this case,
     /// you should call this method on each root in the forest.
     pub fn write_one<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        println!("\n Write one");
-        println!("self.data = {:#?}", &self.get_data());
-        println!("self.used = {:?}", &self.used.get());
-
         let mut self_copy = self.clone();
 
         if self.ty == NodeType::Branch {
@@ -282,9 +278,7 @@ impl Node {
             index: &mut BTreeMap<BitcoinNodeHash, Weak<Node>>,
         ) -> std::io::Result<Rc<Node>> {
             let mut ty = [0u8; 8];
-            // println!("Reading node");
             reader.read_exact(&mut ty)?;
-            // println!("Read type");
             let data = BitcoinNodeHash::read(reader)?;
 
             let ty = match u64::from_le_bytes(ty) {
@@ -733,7 +727,6 @@ impl Pollard {
         let leaves = read_u64(&mut reader)?;
         let roots_len = read_u64(&mut reader)?;
 
-        println!("leaves: {}, roots_len: {}", leaves, roots_len);
         let mut roots = Vec::new();
         let mut map = BTreeMap::new();
         for _ in 0..roots_len {
@@ -1335,26 +1328,11 @@ mod test {
         p.modify(&hashes, &Vec::new()).unwrap();
         let cloned_p = p.clone();
         let serialized_cloned_p = bincode::serialize(&cloned_p).unwrap();
-        println!("Pollard size: {}", serialized_cloned_p.len());
         p.restore_used_flag();
-        // println!("Map size: {}", p.map.len());
-        // for root in p.roots {
-        //     println!("{:#?}", root.used.get());
-        // }
+
         let stripped = p.get_stripped_pollard();
 
-        // let mut count = 0;
-        // let mut used_count = 0;
-        // for (_hash, wnode) in stripped.map {
-        //     count += 1;
-        //     if wnode.upgrade().unwrap().used.get() {
-        //         used_count += 1;
-        //     }
-        // }
-        // println!("Total nodes: {count}, used nodes: {used_count}");
-
         let serialized_p = bincode::serialize(&stripped).unwrap();
-        println!("Stripped Pollard size: {}", serialized_p.len());
     }
 
     #[test]
