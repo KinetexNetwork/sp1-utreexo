@@ -48,6 +48,8 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
+use sha2::{Sha256, Sha512, Digest};
+
 use bitcoin_hashes::hex;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::sha512_256;
@@ -218,12 +220,17 @@ impl BitcoinNodeHash {
     /// assert_eq!(parent, expected_parent);
     /// ```
     pub fn parent_hash(left: &BitcoinNodeHash, right: &BitcoinNodeHash) -> BitcoinNodeHash {
+        let mut hasher = Sha256::new();
+        hasher.update(left.as_slice());
+        hasher.update(right.as_slice());
+        let result = hasher.finalize();
+        BitcoinNodeHash::from(result.as_slice())
         
-        println!("parent hash called");
-        let mut hash = sha512_256::Hash::engine();
-        hash.input(&**left);
-        hash.input(&**right);
-        sha512_256::Hash::from_engine(hash).into()
+        // println!("parent hash called");
+        // let mut hash = sha512_256::Hash::engine();
+        // hash.input(&**left);
+        // hash.input(&**right);
+        // sha512_256::Hash::from_engine(hash).into()
     }
 
     /// Returns a arbitrary placeholder hash that is unlikely to collide with any other hash.
