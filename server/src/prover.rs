@@ -502,7 +502,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
     fn process_block(&mut self, block: &Block, height: u32, mtp: u32) -> (Proof, Vec<LeafContext>) {
         let tx_count = block.txdata.len();
         let mut is_interesting =
-            !Path::new(format!("acc-datas/block-{}txs", tx_count).as_str()).exists() && tx_count % 100 == 0;
+            !Path::new(format!("acc-datas/block-{}txs", tx_count).as_str()).exists() && (tx_count % 100 == 0 || tx_count < 10);
 
         if height >= 876000 {
             is_interesting = true;
