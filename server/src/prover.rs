@@ -501,8 +501,12 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
     /// Processes a block and returns the batch proof and the compact leaf data for the block.
     fn process_block(&mut self, block: &Block, height: u32, mtp: u32) -> (Proof, Vec<LeafContext>) {
         let tx_count = block.txdata.len();
-        let is_interesting =
-            !Path::new(format!("acc-datas/block-{}txs", tx_count).as_str()).exists();
+        let mut is_interesting =
+            !Path::new(format!("acc-datas/block-{}txs", tx_count).as_str()).exists() && tx_count % 100 == 0;
+
+        if height >= 876000 {
+            is_interesting = true;
+        }
         if is_interesting {
             fs::create_dir(format!("acc-datas/block-{}txs", tx_count).as_str()).unwrap()
         }
