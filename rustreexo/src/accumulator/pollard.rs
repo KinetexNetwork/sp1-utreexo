@@ -282,9 +282,9 @@ impl Node {
             index: &mut BTreeMap<BitcoinNodeHash, Weak<Node>>,
         ) -> std::io::Result<Rc<Node>> {
             let mut ty = [0u8; 8];
-            println!("Reading node");
+            // println!("Reading node");
             reader.read_exact(&mut ty)?;
-            println!("Read type");
+            // println!("Read type");
             let data = BitcoinNodeHash::read(reader)?;
 
             let ty = match u64::from_le_bytes(ty) {
@@ -415,7 +415,7 @@ impl Pollard {
                 new_roots.push(Rc::new(new_root));
             }
         }
-        let new_leaves: u64 = 0; // TODO: Am I sure we don't need it??
+        let new_leaves: u64 = self.leaves; // TODO: Am I sure we don't need it??
 
         let mut new_map: BTreeMap<BitcoinNodeHash, Weak<Node>> = Default::default();
 
