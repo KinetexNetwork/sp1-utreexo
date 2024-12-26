@@ -67,7 +67,7 @@ def move_data_to_input(txnum: int) -> Result:
         logging.error(f"Failed to create directory input-generator/acc-data/block-{txnum}txs/")
         return Result.FAILURE
     input_data_path = f"input-generator/acc-data/block-{txnum}txs/"
-    errno = system(f"cp -r {server_data_path} {input_data_path}")
+    errno = system(f"cp -r {server_data_path}* {input_data_path}")
     if errno != 0:
         logging.error(f"Failed to move data from {server_data_path} to {input_data_path}")
         return Result.FAILURE
