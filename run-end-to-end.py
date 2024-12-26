@@ -220,11 +220,16 @@ def concurrent_main():
     print(f"{YELLOW}Warn: all times was NOT measured, but estimated{DEFAULT_COLOR}")
     with ThreadPoolExecutor() as executor:
         futures = {executor.submit(process_txnum, txnum): txnum for txnum in get_available_txnums()}
+        was_err = False
         for future in as_completed(futures):
             try:
                 result = future.result()
             except Exception as e:
                 print(f"Error: {e}")
+                was_err = True
+        if was_err:
+            raise Exception("Failed to run one of the txnums")
+                
     cleanup()
 
 
