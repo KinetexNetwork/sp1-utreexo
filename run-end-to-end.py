@@ -7,6 +7,18 @@ import json
 import os
 from enum import Enum
 from math import log
+import argparse
+
+IS_TEST = False
+
+def parse_arguments():
+    global IS_TEST
+    parser = argparse.ArgumentParser(description="Add --test flag to the script.")
+    parser.add_argument('--test', action='store_true', help='Set this flag to enable test mode.')
+    args = parser.parse_args()
+    
+    if args.test:
+        IS_TEST = True
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -18,6 +30,9 @@ IMPROVEMENTS = list()
 HEIGHTS = list()
 CYCLES = list()
 BASELINE_CYCLES = list()
+
+
+INITIAL_DATA_PATH = "server/acc-datas/"
 
 class Result(Enum):
     SUCCESS = 0
@@ -46,7 +61,7 @@ def get_height(txnum: int) -> int:
 
 
 def move_data_to_input(txnum: int) -> Result:
-    server_data_path = f"server/acc-datas/block-{txnum}txs/"
+    server_data_path = f"{INITIAL_DATA_PATH}block-{txnum}txs/"
     errno = system(f"mkdir -p input-generator/acc-data/block-{txnum}txs/")
     if errno != 0:
         logging.error(f"Failed to create directory input-generator/acc-data/block-{txnum}txs/")
@@ -89,11 +104,18 @@ def run_circuit(txnum: int) -> Result:
     command = f"cargo r --release -- --execute --exact {txnum}"
     result = run(command, shell=True, cwd="circuit/script", stdout=PIPE, stderr=PIPE)
     if result.returncode != 0:
-        with open(f"circuit-error-{txnum}.log", "wb") as f:
-            f.write(result.stdout)
-            f.write(result.stderr)
-            logging.error(f"Circuit failed for txnum = {txnum}. Dumped error log to circuit-error-{txnum}.log")
-            return Result.FAILURE
+        if not IS_TEST:
+            with open(f"circuit-error-{txnum}.log", "wb") as f:
+                f.write(result.stdout)
+                f.write(result.stderr)
+                logging.error(f"Circuit failed for txnum = {txnum}. Dumped error log to circuit-error-{txnum}.log")
+                return Result.FAILURE
+        else:
+            print(f"Circuit failed for txnum = {txnum}")
+            print(f"Output: {result.stdout}")
+            print(f"Error: {result.stderr}")
+            raise Exception("Circuit failed")
+            
     logging.info(f"Circuit succeeded for txnum = {txnum}")
     return Result.SUCCESS
 
@@ -125,6 +147,8 @@ def print_report(txnum: int) -> None:
 
     except Exception as e:
         print(f"Failed to write report with error: {e}")
+        if IS_TEST:
+            raise e
 
 
 def sizeof_fmt(num, suffix="B"):
@@ -137,7 +161,7 @@ def sizeof_fmt(num, suffix="B"):
 
 
 def get_available_txnums() -> list[int]:
-    server_data_path = "server/acc-datas/"
+    server_data_path = INITIAL_DATA_PATH
     txnums = []
     for entry in os.listdir(server_data_path):
         if os.path.isdir(os.path.join(server_data_path, entry)):
@@ -155,11 +179,18 @@ def cleanup() -> None:
     system("rm -rf circuit/metrics/*")
 
 
+
 def main() -> None:
     logging.basicConfig(level=logging.ERROR)
+    parse_arguments()
+    if IS_TEST:
+        global INITIAL_DATA_PATH
+        INITIAL_DATA_PATH = "test-data/"
     print(f"{YELLOW}Warn: all times was NOT measured, but estimated{DEFAULT_COLOR}")
     for txnum in get_available_txnums():
-        run_one(txnum)
+        res = run_one(txnum)
+        if IS_TEST and res == Result.FAILURE:
+            raise Exception("Failed to run one of the txnums")
     cleanup()
 
 
