@@ -22,7 +22,7 @@ jobs:
         ~/.sp1/bin/sp1up
         ~/.sp1/bin/cargo-prove prove --version
     - name: Build ciruit
-      run: bash -c "cd circuit/program/utreexo && cargo prove build"
+      run: bash -c "cd circuit/program/utreexo && ~/.sp1/bin/cargo-prove prove build"
     - name: Build circuit script
       run: bash -c "cd circuit/script && cargo build"
     - name: Build
