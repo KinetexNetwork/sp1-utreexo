@@ -22,9 +22,9 @@ jobs:
         ~/.sp1/bin/sp1up
         ~/.sp1/bin/cargo-prove prove --version
     - name: Build circuit
-        run: |
-          cd circuit/program/utreexo
-          ~/.sp1/bin/cargo-prove prove build
+      run: |
+        cd circuit/program/utreexo
+        ~/.sp1/bin/cargo-prove prove build
     - name: Build
       run: cargo build --workspace --exclude btcx-program-utreexo --exclude utreexo-script
     - name: Run unit tests
