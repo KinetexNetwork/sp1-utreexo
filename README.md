@@ -9,7 +9,16 @@ This project aims to implement SP-1 powered zk-circuit for updating a utreexo ac
 
 ## Status
 
-Project is WIP, and we don't have all components working together yet. However, we already can manually run the `server` and run `circuit` with prepared data.
+Project is WIP and here is the list of things we already have:
+
+- [x] we already have a zk-circuit for updating a utreexo accumulator
+- [x] we have a server which fetches block data from a bitcoin node and updates utreexo outside circuit
+- [x] we have code to prepare data for the circuit
+- [x] we implemented some robust performance optimizations for circuit
+
+TODO:
+- [ ] integrate circuit with the server
+- [ ] add endpoints to server for getting utreexo proofs and utreexo roots for given height 
 
 
 ## How to run
