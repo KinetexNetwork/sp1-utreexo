@@ -6,6 +6,7 @@ import logging
 import json
 import os
 from enum import Enum
+from math import log
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -100,25 +101,39 @@ def run_circuit(txnum: int) -> Result:
 def print_report(txnum: int) -> None:
     try:
         report_path = f"circuit/metrics-cycles-new/{txnum}.json"
-        baseline_path = f"circuit/metrics-cycles/{txnum}.json"
         with open(report_path, "r") as report_file:
-            with open(baseline_path, "r") as baseline_file:
-                report_json = json.load(report_file)
-                cycles = report_json["total_instructions"]
-                baseline_json = json.load(baseline_file)
-                baseline_cycles = baseline_json["total_instructions"]
-                improvement = baseline_cycles / cycles
-                improvement_color = RED if improvement < 1 else YELLOW if improvement < 10 else GREEN if improvement < 100 else BLUE
-                print(f"TxNum = {txnum}; Cycles = {cycles}; Baseline Cycles = {baseline_cycles}; {improvement_color} Improvement = {improvement} times {DEFAULT_COLOR}")
-                IMPROVEMENTS.append(improvement)
-                avg_improvement = sum(IMPROVEMENTS) / len(IMPROVEMENTS)
-                avg_improvement_color = RED if avg_improvement < 1 else YELLOW if avg_improvement < 10 else GREEN if avg_improvement < 100 else BLUE
-                print(f"{avg_improvement_color}Average improvement atm = {avg_improvement} {DEFAULT_COLOR}")
-                CYCLES.append(cycles)
-                BASELINE_CYCLES.append(baseline_cycles)
+            report_json = json.load(report_file)
+            cycles = report_json["total_instructions"]
+            acc_size = report_json["acc_size"]
+            height = report_json["block_height"]
+            block_size = report_json["block_size"]
+            max_cpu_speed = 25 * 10**6 # 25 MHz
+            min_cpu_speed = 10 * 10**6 # 10 MHz
+            min_time = cycles / max_cpu_speed
+            max_time = cycles / min_cpu_speed
+            color = RED if max_time > 5 * 60 else YELLOW if max_time > 3 * 60 else GREEN
+            print(f"TxNum = {txnum}; Height = {height}; Time: {color}{min_time:.2f}s-{max_time:.2f}s{DEFAULT_COLOR}")
+
+            acc_size_before_processing = os.path.getsize(f"input-generator/acc-data/block-{txnum}txs/acc-beffore.txt")
+            acc_size_after_processing = os.path.getsize(f"input-generator/processed-acc-data/block-{txnum}txs/acc-before.txt")
+
+            # We assume that our algorithm is O(block_size * log(acc_size)), thus, while our assumption is
+            # correct, this coeffecient should be have relatively low variance.
+            coeffecient = (block_size * log(acc_size, 2)) / cycles
+            print(f"Formula coeffecient: {coeffecient:.2f}")
+            print(f"Acc before processing: {sizeof_fmt(acc_size_before_processing)}; Acc after processing: {sizeof_fmt(acc_size_after_processing)}")
+
     except Exception as e:
         print(f"Failed to write report with error: {e}")
 
+
+def sizeof_fmt(num, suffix="B"):
+    """Convert bytes to a human-readable format."""
+    for unit in ["", "K", "M", "G", "T", "P", "E", "Z"]:
+        if abs(num) < 1024.0:
+            return f"{num:3.1f}{unit}{suffix}"
+        num /= 1024.0
+    return f"{num:.1f}Y{suffix}"
 
 
 def get_available_txnums() -> list[int]:
@@ -140,29 +155,11 @@ def cleanup() -> None:
     system("rm -rf circuit/metrics-cycles-new/*")
 
 
-def print_plot() -> None:
-    import matplotlib.pyplot as plt
-
-    heights = HEIGHTS
-    cycles = CYCLES
-    baseline_cycles = BASELINE_CYCLES
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(heights, cycles, label='Cycles', marker='o')
-    plt.plot(heights, baseline_cycles, label='Baseline Cycles', marker='x')
-    plt.xlabel('Block Height')
-    plt.ylabel('Cycles')
-    plt.title('Cycles and Baseline Cycles vs Block Height')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-
 def main() -> None:
     logging.basicConfig(level=logging.ERROR)
+    print(f"{YELLOW}Warn: all times was NOT measured, but estimated{DEFAULT_COLOR}")
     for txnum in get_available_txnums():
         run_one(txnum)
-    print_plot()
     cleanup()
 
 

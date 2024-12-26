@@ -1,0 +1,6 @@
+*.log
+circuit/acc-data/*
+circuit/metrics-cycles-new/*
+circuit/metrics-cycles-new-2/*
+input-generator/acc-data/*
+input-generator/processed-acc-data/*
