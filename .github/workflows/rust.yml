@@ -21,10 +21,6 @@ jobs:
         curl -L https://sp1.succinct.xyz | bash
         ~/.sp1/bin/sp1up
         ~/.sp1/bin/cargo-prove prove --version
-    - name: Build ciruit
-      run: bash -c "cd circuit/program/utreexo && ~/.sp1/bin/cargo-prove prove build"
-    - name: Build circuit script
-      run: bash -c "cd circuit/script && cargo build"
     - name: Build
       run: cargo build --workspace --exclude btcx-program-utreexo --exclude utreexo-script
     - name: Run unit tests
