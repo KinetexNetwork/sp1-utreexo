@@ -16,10 +16,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Download sp1
-      run: curl -L https://sp1.succinct.xyz | bash
     - name: Install sp1
-      run: source /home/runner/.bashrc && sp1up
+      run: |
+        curl -L https://sp1.succinct.xyz | bash
+        ~/.sp1/bin/sp1up
+        ~/.sp1/bin/cargo-prove prove --version
     - name: Build
       run: cargo build --verbose
     - name: Run unit tests
@@ -44,5 +45,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Install sp1
+      run: |
+        curl -L https://sp1.succinct.xyz | bash
+        ~/.sp1/bin/sp1up
+        ~/.sp1/bin/cargo-prove prove --version
     - name: Run end to end tests
       run: python3 run-end-to-end.py --test
