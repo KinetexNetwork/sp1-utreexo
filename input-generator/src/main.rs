@@ -276,6 +276,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let entry = entry?;
             println!("{}", entry.path().display());
         }
+        for entry in fs::read_dir("./acc-data/block-1txs")? {
+            let entry = entry?;
+            println!("{}", entry.path().display());
+        }
         // end of debug
 
         let block: Block = bitcoin::consensus::deserialize(
