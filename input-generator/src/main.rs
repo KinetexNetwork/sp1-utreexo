@@ -1,30 +1,20 @@
-use alloy_sol_types::{sol, SolType};
 use bitcoin::consensus::Encodable;
+use bitcoin::Block;
 use bitcoin::TxIn;
-use bitcoin::{block, Block};
 use bitcoin::{BlockHash, OutPoint, TxOut, VarInt};
 use clap::Parser;
-use esplora_client;
 use regex::Regex;
-use reqwest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use serde::{Deserialize, Serialize};
 use serde_json::to_writer_pretty;
-use serde_json::Value;
 use sha2::{Digest, Sha512_256};
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt::format;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Cursor;
-use std::ops::Deref;
-use std::str::FromStr;
-use std::time;
-use std::time::{Duration, Instant};
-use tokio::time::error::Elapsed;
 
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub enum ScriptPubkeyType {
@@ -126,37 +116,6 @@ impl LeafCache for HashMap<OutPoint, LeafData> {
     }
 }
 
-async fn get_block(height: u32) -> Result<Block, Box<dyn Error>> {
-    // Step 1: Get the block hash for the given height
-    let block_hash_url = format!("https://blockstream.info/api/block-height/{}", height);
-    let block_hash_response = reqwest::get(&block_hash_url).await?;
-    let block_hash = block_hash_response.text().await?;
-
-    let raw_block_url = format!(
-        "https://blockstream.info/api/block/{}/raw",
-        block_hash.trim()
-    );
-    let raw_block_response = reqwest::get(&raw_block_url).await?;
-    let raw_block_bytes = raw_block_response.bytes().await?;
-
-    // Step 3: Deserialize the raw block data into a Block struct
-    let block: Block = bitcoin::consensus::deserialize(&raw_block_bytes).unwrap();
-    Ok(block)
-}
-
-fn get_input_leaf_hashes(file_path: &str) -> HashMap<TxIn, BitcoinNodeHash> {
-    let file = File::open(file_path).unwrap();
-    let reader = BufReader::new(file);
-
-    let deserialized_struct: Vec<(TxIn, (BitcoinNodeHash, CompactLeafData))> =
-        serde_json::from_reader(reader).unwrap();
-    let mut res: HashMap<TxIn, BitcoinNodeHash> = Default::default();
-    for (txin, (hash, _data)) in deserialized_struct {
-        res.insert(txin, hash);
-    }
-    res
-}
-
 fn get_input_leaf_hashes_new(file_path: &str) -> HashMap<TxIn, BitcoinNodeHash> {
     let file = File::open(file_path).unwrap();
     let reader = BufReader::new(file);
@@ -168,40 +127,6 @@ fn get_input_leaf_hashes_new(file_path: &str) -> HashMap<TxIn, BitcoinNodeHash> 
         res.insert(txin, hash);
     }
     res
-}
-
-async fn calculate_current_height(num_tx: u64) -> Result<u32, Box<dyn Error>> {
-    let filename = format!("acc-data/block-{num_tx}txs/block.txt");
-    let contents = fs::read_to_string(filename)?;
-
-    // Regular expression to find the prev_blockhash
-    let re = Regex::new(r"prev_blockhash:\s*([0-9a-fA-F]{64}),")?;
-    let mut captures_iter = re.captures_iter(&contents);
-
-    // Ensure prev_blockhash occurs exactly once
-    let capture = captures_iter.next();
-    if capture.is_none() || captures_iter.next().is_some() {
-        panic!("prev_blockhash occurs not exactly once in the file");
-    }
-
-    // Extract the block hash
-    let prev_blockhash = &capture.unwrap()[1];
-    println!("Previous Block Hash: {}", prev_blockhash);
-
-    // Use the BlockCypher API to get the block height
-    let url = format!(
-        "https://api.blockcypher.com/v1/btc/main/blocks/{}",
-        prev_blockhash
-    );
-    let response = reqwest::get(&url).await?;
-    let json: Value = response.json().await?;
-
-    // Extract and print the block height
-    if let Some(height) = json["height"].as_u64() {
-        Ok(height as u32 + 1)
-    } else {
-        panic!("Block height not found for hash: {}", prev_blockhash);
-    }
 }
 
 fn get_block_heights(data_path: &str) -> Result<Vec<u64>, Box<dyn Error>> {
@@ -242,7 +167,7 @@ fn process_block(
         let txid = tx.compute_txid();
         for input in tx.input.iter() {
             if !tx.is_coinbase() {
-                let hash = input_leaf_hashes.get(&input).unwrap().clone();
+                let hash = *input_leaf_hashes.get(input).unwrap();
                 if let Some(idx) = utxos.iter().position(|h| *h == hash) {
                     utxos.remove(idx);
                 } else {
@@ -300,7 +225,7 @@ fn process_block(
 fn write_input_leaf_hashes(input_leaf_hashes: &HashMap<TxIn, BitcoinNodeHash>, tx_count: u64) {
     let leafs_pairs = input_leaf_hashes
         .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
+        .map(|(k, v)| (k.clone(), *v))
         .collect::<Vec<_>>();
     let file = File::create(format!(
         "processed-acc-data/block-{tx_count}txs/input_leaf_hashes.txt"
@@ -348,7 +273,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let height: u32 = read_height_from_file(&height_path);
         println!("Calculated height: {height}");
         let acc_before_path: String = format!("acc-data/block-{tx_count}txs/acc-beffore.txt");
-        let acc_after_path: String = format!("acc-data/block-{tx_count}txs/acc-after.txt");
 
         let input_leaf_hashes_path: String =
             format!("acc-data/block-{tx_count}txs/input-leaf-hashes.txt");

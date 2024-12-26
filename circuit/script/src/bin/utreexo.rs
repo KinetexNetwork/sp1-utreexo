@@ -1,15 +1,12 @@
 use alloy_sol_types::{sol, SolType};
 use bitcoin::consensus::Encodable;
+use bitcoin::Block;
 use bitcoin::TxIn;
-use bitcoin::{block, Block};
 use clap::Parser;
 use regex::Regex;
-use reqwest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use sp1_sdk::network::client;
 use sp1_sdk::{utils, ProverClient, SP1Stdin};
 use std::collections::HashMap;
 use std::error::Error;
@@ -17,9 +14,8 @@ use std::fs::{self, File};
 use std::io::BufReader;
 use std::io::Cursor;
 use std::ops::Deref;
-use std::time;
 use std::time::{Duration, Instant};
-use tokio::time::error::Elapsed;
+
 type PublicValuesTuple = sol! {
     (
         bytes, // acc roots
@@ -106,8 +102,7 @@ fn get_output_bytes(path: &str) -> Vec<u8> {
         .collect();
     let acc_roots_bytes: Vec<[u8; 32]> = acc_roots.iter().map(|hash| *hash.deref()).collect();
     let acc_roots_bytes_flat: Vec<u8> = acc_roots_bytes.concat();
-    let expected_bytes = PublicValuesTuple::abi_encode(&(acc_roots_bytes_flat,));
-    expected_bytes
+    PublicValuesTuple::abi_encode(&(acc_roots_bytes_flat,))
 }
 
 fn get_input_leaf_hashes(file_path: &str) -> HashMap<TxIn, BitcoinNodeHash> {
@@ -139,40 +134,6 @@ struct MetricsCycles {
     pub block_size: u64,
     pub block_height: u64,
     pub tx_count: u64,
-}
-
-async fn calculate_current_height(num_tx: u64) -> Result<u32, Box<dyn Error>> {
-    let filename = format!("../acc-data/block-{num_tx}txs/block.txt");
-    let contents = fs::read_to_string(filename)?;
-
-    // Regular expression to find the prev_blockhash
-    let re = Regex::new(r"prev_blockhash:\s*([0-9a-fA-F]{64}),")?;
-    let mut captures_iter = re.captures_iter(&contents);
-
-    // Ensure prev_blockhash occurs exactly once
-    let capture = captures_iter.next();
-    if capture.is_none() || captures_iter.next().is_some() {
-        panic!("prev_blockhash occurs not exactly once in the file");
-    }
-
-    // Extract the block hash
-    let prev_blockhash = &capture.unwrap()[1];
-    println!("Previous Block Hash: {}", prev_blockhash);
-
-    // Use the BlockCypher API to get the block height
-    let url = format!(
-        "https://api.blockcypher.com/v1/btc/main/blocks/{}",
-        prev_blockhash
-    );
-    let response = reqwest::get(&url).await?;
-    let json: Value = response.json().await?;
-
-    // Extract and print the block height
-    if let Some(height) = json["height"].as_u64() {
-        Ok(height as u32 + 1)
-    } else {
-        panic!("Block height not found for hash: {}", prev_blockhash);
-    }
 }
 
 fn get_block_heights(data_path: &str) -> Result<Vec<u64>, Box<dyn Error>> {
@@ -284,10 +245,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             let metrics = MetricsCycles {
                 total_instructions: cycles,
-                acc_size: acc_size,
+                acc_size,
                 block_size: block_size as u64,
                 block_height: height as u64,
-                tx_count: tx_count as u64,
+                tx_count,
             };
 
             let file = File::create(format!("../metrics/{}.json", tx_count))?;
@@ -317,10 +278,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             let metrics = Metrics {
                 prove_duration: duration,
-                acc_size: acc_size,
+                acc_size,
                 block_size: block_size as u64,
                 block_height: height as u64,
-                tx_count: tx_count as u64,
+                tx_count,
             };
 
             let file = File::create(format!("../metrics/{}.json", tx_count))?;

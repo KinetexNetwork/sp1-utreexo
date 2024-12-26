@@ -1,6 +1,4 @@
-use bitcoin::consensus::Encodable;
-use bitcoin::{Block, BlockHash, OutPoint, TxIn, VarInt};
-use bitcoin_hashes::sha256d::Hash;
+use bitcoin::{Block, OutPoint, TxIn};
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use std::collections::HashMap;
@@ -19,7 +17,7 @@ pub fn process_block(
         let txid = tx.compute_txid();
         for input in tx.input.iter() {
             if !tx.is_coinbase() {
-                let hash = input_leaf_hashes.get(&input).unwrap().clone();
+                let hash = *input_leaf_hashes.get(input).unwrap();
                 if let Some(idx) = utxos.iter().position(|h| *h == hash) {
                     utxos.remove(idx);
                 } else {

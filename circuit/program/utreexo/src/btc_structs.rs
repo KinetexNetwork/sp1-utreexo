@@ -6,7 +6,6 @@ use bitcoin::{BlockHash, OutPoint, TxOut, VarInt};
 use bitcoin_hashes::serde::{Deserialize, Serialize};
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use sha2::{Digest, Sha512_256};
-use std::collections::HashMap;
 
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub enum ScriptPubkeyType {
@@ -86,24 +85,5 @@ impl LeafData {
             .chain_update(ser_utxo)
             .finalize();
         BitcoinNodeHash::from(leaf_hash.as_slice())
-    }
-}
-
-pub trait LeafCache: Sync + Send + Sized + 'static {
-    fn remove(&mut self, outpoint: &OutPoint) -> Option<LeafData>;
-    fn insert(&mut self, outpoint: OutPoint, leaf_data: LeafData) -> bool;
-    fn flush(&mut self) {}
-    fn cache_size(&self) -> usize {
-        0
-    }
-}
-
-impl LeafCache for HashMap<OutPoint, LeafData> {
-    fn remove(&mut self, outpoint: &OutPoint) -> Option<LeafData> {
-        self.remove(outpoint)
-    }
-    fn insert(&mut self, outpoint: OutPoint, leaf_data: LeafData) -> bool {
-        self.insert(outpoint, leaf_data);
-        false
     }
 }

@@ -10,7 +10,6 @@ use std::fs;
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
-use std::io::{self};
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
@@ -45,7 +44,6 @@ use crate::block_index::BlockIndex;
 use crate::block_index::BlocksIndex;
 use crate::chaininterface::Blockchain;
 use crate::chainview;
-use crate::udata::CompactLeafData;
 use crate::udata::LeafContext;
 use crate::udata::LeafData;
 use crate::udata::UtreexoBlock;
@@ -121,6 +119,7 @@ pub struct Prover<LeafStorage: LeafCache, Storage: BlockStorage> {
     ibd: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage> {
     /// Creates a new prover. It loads the accumulator from disk, if it exists.
     pub fn new(
@@ -543,7 +542,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             for input in tx.input.iter() {
                 if !tx.is_coinbase() {
                     let (hash, compact_leaf) = self.get_input_leaf_hash(input);
-                    input_leaf_hashes.insert(input.clone(), hash.clone());
+                    input_leaf_hashes.insert(input.clone(), hash);
                     if let Some(idx) = utxos.iter().position(|h| *h == hash) {
                         utxos.remove(idx);
                     } else {

@@ -12,7 +12,6 @@ use std::ops::Deref;
 mod btc_structs;
 mod process_block;
 
-use crate::btc_structs::CompactLeafData;
 use crate::process_block::process_block;
 
 type PublicValuesTuple = sol! {
