@@ -256,7 +256,6 @@ struct Cli {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
     let mut available_tx_counts = get_block_heights("acc-data/").unwrap();
-    println!("1");
     available_tx_counts.sort();
     available_tx_counts = vec![2, 3, 4, 5, 6, 13];
     if args.exact.is_some() {
@@ -268,7 +267,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         println!("Processing block: {block_path}");
         println!("Current directory: {:#?}", std::env::current_dir().unwrap());
         let block: Block =
-            bitcoin::consensus::deserialize(&fs::read(&block_path).unwrap()).unwrap();
+            bitcoin::consensus::deserialize(&fs::read(&block_path).expect("Failed to read block path")).unwrap();
         let height_path = format!("acc-data/block-{tx_count}txs/block-height.txt");
         let height: u32 = read_height_from_file(&height_path);
         println!("Calculated height: {height}");
