@@ -266,6 +266,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let block_path: String = format!("acc-data/block-{tx_count}txs/block.txt");
         println!("Processing block: {block_path}");
         println!("Current directory: {:#?}", std::env::current_dir().unwrap());
+
+        // debug
+        for entry in fs::read_dir(".")? {
+            let entry = entry?;
+            println!("{}", entry.path().display());
+        }
+        for entry in fs::read_dir("./acc-data")? {
+            let entry = entry?;
+            println!("{}", entry.path().display());
+        }
+        // end of debug
+
         let block: Block = bitcoin::consensus::deserialize(
             &fs::read(&block_path).expect("Failed to read block path"),
         )
