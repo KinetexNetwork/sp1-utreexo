@@ -286,9 +286,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 tx_count: tx_count as u64,
             };
 
-            let file = File::create(format!("../metrics-cycles-new/{}.json", tx_count))?;
+            let file = File::create(format!("../metrics/{}.json", tx_count))?;
             serde_json::to_writer_pretty(file, &metrics)?;
-            println!("Report saved to ../metrics-cycles-new/{}.json", tx_count);
+            println!("Report saved to ../metrics/{}.json", tx_count);
         } else {
             let client = ProverClient::new();
             let (pk, vk) = client.setup(ELF);

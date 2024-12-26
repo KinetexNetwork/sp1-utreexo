@@ -38,7 +38,7 @@ def run_one(txnum: int) -> Result:
 
 
 def get_height(txnum: int) -> int:
-    report_path = f"circuit/metrics-cycles-new/{txnum}.json"
+    report_path = f"circuit/metrics/{txnum}.json"
     with open(report_path, "r") as report_file:
         report_json = json.load(report_file)
         height = report_json["block_height"]
@@ -100,7 +100,7 @@ def run_circuit(txnum: int) -> Result:
 
 def print_report(txnum: int) -> None:
     try:
-        report_path = f"circuit/metrics-cycles-new/{txnum}.json"
+        report_path = f"circuit/metrics/{txnum}.json"
         with open(report_path, "r") as report_file:
             report_json = json.load(report_file)
             cycles = report_json["total_instructions"]
@@ -152,7 +152,7 @@ def get_available_txnums() -> list[int]:
 def cleanup() -> None:
     system("rm -rf input-generator/acc-data/*")
     system("rm -rf circuit/acc-data/*")
-    system("rm -rf circuit/metrics-cycles-new/*")
+    system("rm -rf circuit/metrics/*")
 
 
 def main() -> None:

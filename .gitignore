@@ -5,5 +5,7 @@ circuit/metrics-cycles-new-2/*
 input-generator/acc-data/*
 input-generator/processed-acc-data/*
 server/acc-datas/*
+circuit/metrics/*
+
 
 target/
