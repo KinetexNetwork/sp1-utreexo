@@ -148,8 +148,8 @@ def print_report(txnum: int) -> None:
             # We assume that our algorithm is O(block_size * log(acc_size)), thus, while our assumption is
             # correct, this coeffecient should be have relatively low variance.
             coeffecient = (block_size * log(acc_size, 2)) / cycles
-            report += f"Formula coeffecient: {coeffecient:.2f}"
-            report +=f"Acc before processing: {sizeof_fmt(acc_size_before_processing)}; Acc after processing: {sizeof_fmt(acc_size_after_processing)}"
+            report += f"\nFormula coeffecient: {coeffecient:.2f}"
+            report +=f"\nAcc before processing: {sizeof_fmt(acc_size_before_processing)}; Acc after processing: {sizeof_fmt(acc_size_after_processing)}"
             print(report)
 
 
