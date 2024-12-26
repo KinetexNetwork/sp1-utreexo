@@ -48,8 +48,6 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use sha2::{Sha256, Sha512, Digest};
-
 use bitcoin_hashes::hex;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::sha512_256;
@@ -59,6 +57,9 @@ use bitcoin_hashes::HashEngine;
 use serde::Deserialize;
 #[cfg(feature = "with-serde")]
 use serde::Serialize;
+use sha2::Digest;
+use sha2::Sha256;
+use sha2::Sha512;
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, PartialOrd, Ord, Default)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
@@ -225,7 +226,7 @@ impl BitcoinNodeHash {
         hasher.update(right.as_slice());
         let result = hasher.finalize();
         BitcoinNodeHash::from(result.as_slice())
-        
+
         // println!("parent hash called");
         // let mut hash = sha512_256::Hash::engine();
         // hash.input(&**left);

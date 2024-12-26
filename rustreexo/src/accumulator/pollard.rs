@@ -786,7 +786,7 @@ impl Pollard {
             .iter()
             .map(|pos| self.get_hash(*pos).unwrap())
             .collect::<Vec<_>>();
-    } 
+    }
     /// Returns a reference to the roots in this Pollard.
     pub fn get_roots(&self) -> &[Rc<Node>] {
         &self.roots
@@ -911,7 +911,14 @@ impl Pollard {
         let mut node = node.upgrade().unwrap();
         node.used.set(true);
         while let Some(parent) = node.parent.clone().into_inner() {
-            node.parent.borrow().as_ref().unwrap().upgrade().unwrap().used.set(true);
+            node.parent
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .upgrade()
+                .unwrap()
+                .used
+                .set(true);
             let parent_left = parent
                 .upgrade()
                 .and_then(|parent| parent.left.clone().into_inner())

@@ -203,7 +203,11 @@ fn get_block_heights(data_path: &str) -> Result<Vec<u64>, Box<dyn Error>> {
 
 fn read_height_from_file(file_path: &str) -> u32 {
     // let file = File::open(file_path).unwrap();
-    std::fs::read_to_string(file_path).unwrap().trim().parse().unwrap()
+    std::fs::read_to_string(file_path)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap()
 }
 
 #[tokio::main]
@@ -216,17 +220,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut available_tx_counts = get_block_heights("../acc-data/").unwrap();
     available_tx_counts.sort();
-    available_tx_counts = vec![2,3,4,5,6,13];
+    available_tx_counts = vec![2, 3, 4, 5, 6, 13];
     if args.exact.is_some() {
         available_tx_counts = vec![args.exact.unwrap()];
     }
     for tx_count in available_tx_counts {
         let block_path: String = format!("../acc-data/block-{tx_count}txs/block.txt");
-        let block: Block = bitcoin::consensus::deserialize(&fs::read(&block_path).unwrap()).unwrap();
+        let block: Block =
+            bitcoin::consensus::deserialize(&fs::read(&block_path).unwrap()).unwrap();
 
         let height_path = format!("../acc-data/block-{tx_count}txs/block-height.txt");
         let height: u32 = read_height_from_file(&height_path);
-        
+
         println!("Calculated height: {height}");
         let acc_before_path: String = format!("../acc-data/block-{tx_count}txs/acc-before.txt");
         let acc_after_path: String = format!("../acc-data/block-{tx_count}txs/acc-after.txt");
@@ -243,7 +248,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             acc_before.leaves
         );
 
-        
         let input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash> =
             get_input_leaf_hashes(&input_leaf_hashes_path);
 
