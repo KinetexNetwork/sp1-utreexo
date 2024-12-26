@@ -268,14 +268,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         println!("Current directory: {:#?}", std::env::current_dir().unwrap());
 
         // debug
+        println!("Current directory contents:");
         for entry in fs::read_dir(".")? {
             let entry = entry?;
             println!("{}", entry.path().display());
         }
+        println!("acc-data:");
         for entry in fs::read_dir("./acc-data")? {
             let entry = entry?;
             println!("{}", entry.path().display());
         }
+        println!("block-1txs:");
         for entry in fs::read_dir("./acc-data/block-1txs")? {
             let entry = entry?;
             println!("{}", entry.path().display());
