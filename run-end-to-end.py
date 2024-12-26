@@ -140,7 +140,7 @@ def print_report(txnum: int) -> None:
             min_time = cycles / max_cpu_speed
             max_time = cycles / min_cpu_speed
             color = RED if max_time > 5 * 60 else YELLOW if max_time > 3 * 60 else GREEN
-            print(f"TxNum = {txnum}; Height = {height}; Time: {color}{min_time:.2f}s-{max_time:.2f}s{DEFAULT_COLOR}")
+            report = f"TxNum = {txnum}; Height = {height}; Time: {color}{min_time:.2f}s-{max_time:.2f}s{DEFAULT_COLOR}"
 
             acc_size_before_processing = os.path.getsize(f"input-generator/acc-data/block-{txnum}txs/acc-beffore.txt")
             acc_size_after_processing = os.path.getsize(f"input-generator/processed-acc-data/block-{txnum}txs/acc-before.txt")
@@ -148,8 +148,10 @@ def print_report(txnum: int) -> None:
             # We assume that our algorithm is O(block_size * log(acc_size)), thus, while our assumption is
             # correct, this coeffecient should be have relatively low variance.
             coeffecient = (block_size * log(acc_size, 2)) / cycles
-            print(f"Formula coeffecient: {coeffecient:.2f}")
-            print(f"Acc before processing: {sizeof_fmt(acc_size_before_processing)}; Acc after processing: {sizeof_fmt(acc_size_after_processing)}")
+            report += f"Formula coeffecient: {coeffecient:.2f}"
+            report +=f"Acc before processing: {sizeof_fmt(acc_size_before_processing)}; Acc after processing: {sizeof_fmt(acc_size_after_processing)}"
+            print(report)
+
 
     except Exception as e:
         print(f"Failed to write report with error: {e}")
@@ -200,6 +202,31 @@ def main() -> None:
     cleanup()
 
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def process_txnum(txnum):
+    res = run_one(txnum)
+    if IS_TEST and res == Result.FAILURE:
+        raise Exception(f"Failed to run txnum: {txnum}")
+    return res
+
+
+def concurrent_main():
+    logging.basicConfig(level=logging.ERROR)
+    parse_arguments()
+    if IS_TEST:
+        global INITIAL_DATA_PATH
+        INITIAL_DATA_PATH = "test-data/"
+    print(f"{YELLOW}Warn: all times was NOT measured, but estimated{DEFAULT_COLOR}")
+    with ThreadPoolExecutor() as executor:
+        futures = {executor.submit(process_txnum, txnum): txnum for txnum in get_available_txnums()}
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+            except Exception as e:
+                print(f"Error: {e}")
+    cleanup()
+
 
 if __name__ == "__main__":
-    main()
+    concurrent_main()
