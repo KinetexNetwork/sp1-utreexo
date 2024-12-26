@@ -18,10 +18,8 @@ jobs:
     - uses: actions/checkout@v4
     - name: Download sp1
       run: curl -L https://sp1.succinct.xyz | bash
-    - name: Source sp1
-      run: source ~/.bashrc
     - name: Install sp1
-      run: sp1up
+      run: source /home/runner/.bashrc && sp1up
     - name: Build
       run: cargo build --verbose
     - name: Run unit tests
