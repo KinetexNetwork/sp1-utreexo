@@ -16,8 +16,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Install sp1
+    - name: Download sp1
     - run: curl -L https://sp1.succinct.xyz | bash
+    - name: Install sp1
     - run: sp1up
     - name: Build
       run: cargo build --verbose
