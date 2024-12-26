@@ -41,13 +41,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Run end to end tests
-      run: cargo run --bin end-to-end
-
-  end-to-end:
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: Run end to end tests
       run: python3 run-end-to-end.py --test
