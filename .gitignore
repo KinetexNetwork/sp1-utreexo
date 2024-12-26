@@ -5,5 +5,4 @@ input-generator/processed-acc-data/*
 server/acc-datas/*
 circuit/metrics/*
 
-
 target/

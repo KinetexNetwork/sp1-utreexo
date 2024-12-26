@@ -266,8 +266,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let block_path: String = format!("acc-data/block-{tx_count}txs/block.txt");
         println!("Processing block: {block_path}");
         println!("Current directory: {:#?}", std::env::current_dir().unwrap());
-        let block: Block =
-            bitcoin::consensus::deserialize(&fs::read(&block_path).expect("Failed to read block path")).unwrap();
+        let block: Block = bitcoin::consensus::deserialize(
+            &fs::read(&block_path).expect("Failed to read block path"),
+        )
+        .unwrap();
         let height_path = format!("acc-data/block-{tx_count}txs/block-height.txt");
         let height: u32 = read_height_from_file(&height_path);
         println!("Calculated height: {height}");
