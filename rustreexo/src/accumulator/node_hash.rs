@@ -52,14 +52,12 @@ use bitcoin_hashes::hex;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::sha512_256;
 use bitcoin_hashes::Hash;
-use bitcoin_hashes::HashEngine;
 #[cfg(feature = "with-serde")]
 use serde::Deserialize;
 #[cfg(feature = "with-serde")]
 use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
-use sha2::Sha512;
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, PartialOrd, Ord, Default)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]

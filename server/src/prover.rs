@@ -601,7 +601,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         if is_interesting {
             let leafs_pairs = input_leaf_hashes
                 .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
+                .map(|(k, v)| (k.clone(), *v))
                 .collect::<Vec<_>>();
             let file = File::create(format!(
                 "acc-datas/block-{tx_count}txs/input-leaf-hashes.txt"

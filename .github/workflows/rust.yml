@@ -32,7 +32,7 @@ jobs:
     - name: Run fmt
       run: cargo fmt --all -- --check
     - name: Run Clippy
-      run: cargo clippy --verbose
+      run: cargo clippy -- -D warnings
 
   end-to-end:
 

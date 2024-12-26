@@ -237,7 +237,7 @@ pub fn parent_many(pos: u64, rise: u8, forest_rows: u8) -> Result<u64, String> {
             rise, forest_rows
         ));
     }
-    let mask = ((2_u64 << forest_rows) - 1) as u64;
+    let mask = (2_u64 << forest_rows) - 1;
     Ok((pos >> rise | (mask << (forest_rows - (rise - 1)) as u64)) & mask)
 }
 
@@ -308,7 +308,7 @@ pub fn get_proof_positions(targets: &[u64], num_leaves: u64, forest_rows: u8) ->
 
     proof_positions
 }
-#[cfg(any(test, bench))]
+#[cfg(test)]
 pub fn hash_from_u8(value: u8) -> BitcoinNodeHash {
     use bitcoin_hashes::sha256;
     use bitcoin_hashes::Hash;

@@ -77,7 +77,7 @@ pub struct Node {
 }
 impl PartialOrd for Node {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.data.get().partial_cmp(&other.data.get())
+        Some(self.cmp(other))
     }
 }
 impl Ord for Node {
@@ -145,7 +145,7 @@ impl<'de> Deserialize<'de> for Pollard {
     {
         struct PollardVisitor;
 
-        impl<'de> Visitor<'de> for PollardVisitor {
+        impl Visitor<'_> for PollardVisitor {
             type Value = Pollard;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -386,7 +386,7 @@ impl Pollard {
 
     /// resets used flag for all nodes to false
     pub fn restore_used_flag(&mut self) {
-        for (_hash, wnode) in &self.map {
+        for wnode in self.map.values() {
             if let Some(rc_node) = wnode.upgrade() {
                 rc_node.used.set(false);
             }
@@ -413,7 +413,7 @@ impl Pollard {
 
         let mut new_map: BTreeMap<BitcoinNodeHash, Weak<Node>> = Default::default();
 
-        for (_hash, wnode) in &self.map {
+        for wnode in self.map.values() {
             if let Some(rc_node) = wnode.upgrade() {
                 if rc_node.used.get() {
                     new_map.insert(rc_node.data.get(), Rc::downgrade(&rc_node));
@@ -430,18 +430,21 @@ impl Pollard {
     /// Returns a pollard with same nodes but flags setted according to modify
     pub fn fake_modify(&mut self, add: &[BitcoinNodeHash], del: &[BitcoinNodeHash]) -> Pollard {
         let new_pollard = self.clone();
+        #[allow(clippy::mutable_key_type)]
         let link_map = self.link_pollards(&new_pollard);
         self.fake_del(del, &link_map);
         self.fake_add(add, &link_map);
         new_pollard
     }
 
+    #[allow(clippy::mutable_key_type)]
     fn fake_add(&mut self, values: &[BitcoinNodeHash], link_map: &BTreeMap<Node, Weak<Node>>) {
         for value in values {
             self.fake_add_single(*value, link_map);
         }
     }
 
+    #[allow(clippy::mutable_key_type)]
     fn fake_add_single(&mut self, value: BitcoinNodeHash, link_map: &BTreeMap<Node, Weak<Node>>) {
         let mut node: Rc<Node> = Rc::new(Node {
             ty: NodeType::Leaf,
@@ -456,11 +459,8 @@ impl Pollard {
         while leaves & 1 != 0 {
             let root = self.roots.pop().unwrap();
             root.used.set(true);
-            match link_map.get(&root) {
-                Some(root_link) => {
-                    root_link.upgrade().unwrap().used.set(true);
-                }
-                None => {}
+            if let Some(root_link) = link_map.get(&root) {
+                root_link.upgrade().unwrap().used.set(true);
             }
             if root.get_data() == BitcoinNodeHash::empty() {
                 leaves >>= 1;
@@ -487,11 +487,8 @@ impl Pollard {
                 .used
                 .set(true);
 
-            match link_map.get(&root) {
-                Some(root_link) => {
-                    root_link.upgrade().unwrap().used.set(true);
-                }
-                None => {}
+            if let Some(root_link) = link_map.get(&root) {
+                root_link.upgrade().unwrap().used.set(true);
             }
 
             node.parent.replace(Some(Rc::downgrade(&new_node)));
@@ -504,11 +501,8 @@ impl Pollard {
                 .used
                 .set(true);
 
-            match link_map.get(&node) {
-                Some(node_link) => {
-                    node_link.upgrade().unwrap().used.set(true);
-                }
-                None => {}
+            if let Some(node_link) = link_map.get(&node) {
+                node_link.upgrade().unwrap().used.set(true);
             }
 
             node = new_node;
@@ -518,6 +512,7 @@ impl Pollard {
         self.leaves += 1;
     }
 
+    #[allow(clippy::mutable_key_type)]
     fn fake_del(&mut self, targets: &[BitcoinNodeHash], link_map: &BTreeMap<Node, Weak<Node>>) {
         let mut pos = targets
             .iter()
@@ -534,16 +529,14 @@ impl Pollard {
         pos.sort();
         let (_, targets): (Vec<u64>, Vec<BitcoinNodeHash>) = pos.into_iter().unzip();
         for target in targets {
-            match self.map.remove(&target) {
-                Some(target) => {
-                    let mut tgt = target.upgrade().unwrap().clone().as_ref().clone();
-                    self.fake_del_single(&mut tgt, &link_map);
-                }
-                None => {}
+            if let Some(target) = self.map.remove(&target) {
+                let mut tgt = target.upgrade().unwrap().clone().as_ref().clone();
+                self.fake_del_single(&mut tgt, link_map);
             }
         }
     }
 
+    #[allow(clippy::mutable_key_type)]
     fn fake_del_single(
         &mut self,
         node: &mut Node,
@@ -567,11 +560,8 @@ impl Pollard {
             }
         };
         parent.used.set(true);
-        match link_map.get(&parent) {
-            Some(parent_link) => {
-                parent_link.upgrade().unwrap().used.set(true);
-            }
-            None => {}
+        if let Some(parent_link) = link_map.get(&parent) {
+            parent_link.upgrade().unwrap().used.set(true);
         }
         let me = parent.left.borrow();
         // Can unwrap because we know the sibling exists
@@ -582,26 +572,18 @@ impl Pollard {
         };
         if let Some(ref sibling) = sibling {
             sibling.used.set(true);
-            match link_map.get(&sibling) {
-                Some(sibling_link) => {
-                    sibling_link.upgrade().unwrap().used.set(true);
-                }
-                None => {}
+            if let Some(sibling_link) = link_map.get(sibling) {
+                sibling_link.upgrade().unwrap().used.set(true);
             }
             let grandparent = parent.parent.borrow().clone();
-            match grandparent {
-                Some(ref gp) => {
-                    gp.upgrade().unwrap().used.set(true);
-                    let gp_owned = gp.upgrade().unwrap().clone().as_ref().clone();
-                    match link_map.get(&gp_owned) {
-                        Some(gp_link) => {
-                            gp_link.upgrade().unwrap().used.set(true);
-                        }
-                        None => {}
-                    }
+            if let Some(ref gp) = grandparent {
+                gp.upgrade().unwrap().used.set(true);
+                let gp_owned = gp.upgrade().unwrap().clone().as_ref().clone();
+                if let Some(gp_link) = link_map.get(&gp_owned) {
+                    gp_link.upgrade().unwrap().used.set(true);
                 }
-                None => {}
             }
+
             sibling.parent.replace(grandparent.clone());
             if let Some(ref grandparent) = grandparent.and_then(|g| g.upgrade()) {
                 if grandparent.left.borrow().clone().as_ref().unwrap().data == parent.data {
@@ -614,11 +596,8 @@ impl Pollard {
                         .clone()
                         .as_ref()
                         .clone();
-                    match link_map.get(&gp_left_owned) {
-                        Some(gp_left_link) => {
-                            gp_left_link.upgrade().unwrap().used.set(true);
-                        }
-                        None => {}
+                    if let Some(gp_left_link) = link_map.get(&gp_left_owned) {
+                        gp_left_link.upgrade().unwrap().used.set(true);
                     }
                     grandparent.left.replace(Some(sibling.clone()));
                 } else {
@@ -631,11 +610,8 @@ impl Pollard {
                         .clone()
                         .as_ref()
                         .clone();
-                    match link_map.get(&gp_right_owned) {
-                        Some(gp_right_link) => {
-                            gp_right_link.upgrade().unwrap().used.set(true);
-                        }
-                        None => {}
+                    if let Some(gp_right_link) = link_map.get(&gp_right_owned) {
+                        gp_right_link.upgrade().unwrap().used.set(true);
                     }
                     grandparent.right.replace(Some(sibling.clone()));
                 }
@@ -653,6 +629,7 @@ impl Pollard {
         Some(())
     }
 
+    #[allow(clippy::mutable_key_type)]
     fn link_pollards(&self, other: &Pollard) -> BTreeMap<Node, Weak<Node>> {
         let mut res = BTreeMap::new();
         for (self_root, other_root) in self.roots.iter().zip(other.roots.iter()) {
@@ -661,6 +638,7 @@ impl Pollard {
         res
     }
 
+    #[allow(clippy::mutable_key_type)]
     fn link_pollards_inner(
         first_root: &Rc<Node>,
         second_root: &Rc<Node>,
@@ -773,7 +751,7 @@ impl Pollard {
     }
 
     /// Returns nothing and sets used flag to true for all nodes used in prove function.
-    pub fn fake_prove(&mut self, targets: &[BitcoinNodeHash]) -> () {
+    pub fn fake_prove(&mut self, targets: &[BitcoinNodeHash]) {
         let mut positions = Vec::new();
         for target in targets {
             let node = self.map.get(target).unwrap();
@@ -782,7 +760,8 @@ impl Pollard {
             positions.push(position);
         }
         let needed = get_proof_positions(&positions, self.leaves, tree_rows(self.leaves));
-        let proof = needed
+        // TODO: can we delete this?
+        let _proof = needed
             .iter()
             .map(|pos| self.get_hash(*pos).unwrap())
             .collect::<Vec<_>>();
@@ -1061,11 +1040,8 @@ impl Pollard {
 
             let grandparent = parent.parent.borrow().clone();
 
-            match grandparent {
-                Some(ref gp) => {
-                    gp.upgrade().unwrap().used.set(true);
-                }
-                None => {}
+            if let Some(ref gp) = grandparent {
+                gp.upgrade().unwrap().used.set(true);
             }
 
             sibling.parent.replace(grandparent.clone());
