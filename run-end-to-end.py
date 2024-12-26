@@ -79,11 +79,17 @@ def run_input_generator(txnum: int) -> Result:
     command = f"cargo r -- --exact {txnum}"
     result = run(command, shell=True, cwd="input-generator", stdout=PIPE, stderr=PIPE)
     if result.returncode != 0:
-        with open(f"input-generator-error-{txnum}.log", "wb") as f:
-            f.write(result.stdout)
-            f.write(result.stderr)
-            logging.error(f"Input generator failed for txnum = {txnum}. Dumped error log to input-generator-error-{txnum}.log")
-            return Result.FAILURE
+        if not IS_TEST:
+            with open(f"input-generator-error-{txnum}.log", "wb") as f:
+                f.write(result.stdout)
+                f.write(result.stderr)
+                logging.error(f"Input generator failed for txnum = {txnum}. Dumped error log to input-generator-error-{txnum}.log")
+                return Result.FAILURE
+        else:
+            print(f"Input generator failed for txnum = {txnum}")
+            print(f"Output: {result.stdout}")
+            print(f"Error: {result.stderr}")
+            raise Exception("Input generator failed")
     logging.info(f"Input generator succeeded for txnum = {txnum}")
     return Result.SUCCESS
 
