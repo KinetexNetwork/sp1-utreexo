@@ -18,5 +18,36 @@ jobs:
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
-    - name: Run tests
+    - name: Run unit tests
       run: cargo test --verbose
+
+  lint:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install Clippy
+      run: rustup component add clippy
+    - name: Run fmt
+      run: cargo fmt --all -- --check
+    - name: Run Clippy
+      run: cargo clippy --verbose
+
+  end-to-end:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run end to end tests
+      run: cargo run --bin end-to-end
+
+  end-to-end:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run end to end tests
+      run: python3 run-end-to-end.py --test
