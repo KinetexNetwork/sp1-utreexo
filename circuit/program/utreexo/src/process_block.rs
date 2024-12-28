@@ -25,6 +25,7 @@ pub fn process_block(
                 }
             }
         }
+        let block_hash = block.block_hash();
         for (idx, output) in tx.output.iter().enumerate() {
             // TODO: doublecheck if is_op_return is proper method
             if !output.script_pubkey.is_op_return() {
@@ -34,7 +35,7 @@ pub fn process_block(
                     height << 1
                 };
                 let leaf = LeafData {
-                    block_hash: block.block_hash(),
+                    block_hash,
                     header_code,
                     prevout: OutPoint {
                         txid,
