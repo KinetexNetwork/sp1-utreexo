@@ -350,6 +350,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
     ) -> anyhow::Result<()> {
         let mut last_tip_update = std::time::Instant::now();
         loop {
+            let start = std::time::Instant::now();
             if *self.shutdown_flag.lock().unwrap() {
                 info!("Shutting down prover");
                 self.shutdown();
@@ -371,6 +372,8 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             }
 
             std::thread::sleep(std::time::Duration::from_micros(100));
+            let elapsed = start.elapsed();
+            info!("Event loop cycle took {}", elapsed.as_nanos());
         }
         self.save_to_disk(None)
             .expect("could not save the acc to disk");
