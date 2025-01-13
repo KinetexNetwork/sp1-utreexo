@@ -408,7 +408,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             let start_time = std::time::Instant::now();
             let block = self.rpc.get_block(block_hash)?;
             let elapsed = start_time.elapsed();
-            info!("got block with hash {}, elapsed {}", block_hash, elapsed.as_millis_f64());
+            info!("got block with hash {}, elapsed {}", block_hash, elapsed.as_nanos());
 
             self.view
                 .save_header(block_hash, serialize(&block.header))?;
