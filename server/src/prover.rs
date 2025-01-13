@@ -421,7 +421,12 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             );
 
             let mtp = self.rpc.get_mtp(block.header.prev_blockhash)?;
+
+            info!("processing block with height {}", height);
+            let start_time2 = std::time::Instant::now();
             let (proof, leaves) = self.process_block(&block, height, mtp);
+            let elapsed2 = start_time.elapsed();
+            info!("processed block with height {}, elapsed {}", height, elapsed.as_nanos());
 
             if height > self.save_proofs_for_blocks_older_than {
                 let index = self
