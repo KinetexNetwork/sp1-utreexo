@@ -404,7 +404,11 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             self.view.save_block_hash(height, block_hash)?;
             self.view.save_height(block_hash, height)?;
 
+            info!("getting block with hash {}", block_hash);
+            let start_time = std::time::Instant::now();
             let block = self.rpc.get_block(block_hash)?;
+            let elapsed = start_time.elapsed();
+            info!("got block with hash {}, elapsed {}", block_hash, elapsed.as_millis_f64());
 
             self.view
                 .save_header(block_hash, serialize(&block.header))?;
