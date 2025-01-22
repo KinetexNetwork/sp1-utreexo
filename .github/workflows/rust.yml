@@ -19,7 +19,8 @@ jobs:
     - name: Install sp1
       run: |
         curl -L https://sp1.succinct.xyz | bash
-        ~/.sp1/bin/sp1up
+        export PATH="$PATH:$HOME/.sp1/bin"
+        sp1up -v v4.0.1
     - name: Build circuit
       run: |
         cd circuit/program/utreexo
