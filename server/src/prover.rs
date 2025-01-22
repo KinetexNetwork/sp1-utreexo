@@ -407,11 +407,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             self.view.save_block_hash(height, block_hash)?;
             self.view.save_height(block_hash, height)?;
 
-            info!("getting block with hash {}", block_hash);
-            let start_time = std::time::Instant::now();
             let block = self.rpc.get_block(block_hash)?;
-            let elapsed = start_time.elapsed();
-            info!("got block with hash {}, elapsed {}", block_hash, elapsed.as_nanos());
 
             self.view
                 .save_header(block_hash, serialize(&block.header))?;
@@ -425,11 +421,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
 
             let mtp = self.rpc.get_mtp(block.header.prev_blockhash)?;
 
-            info!("processing block with height {}", height);
-            let start_time2 = std::time::Instant::now();
             let (proof, leaves) = self.process_block(&block, height, mtp);
-            let elapsed2 = start_time2.elapsed();
-            info!("processed block with height {}, elapsed {}", height, elapsed2.as_nanos());
 
             if height > self.save_proofs_for_blocks_older_than {
                 let index = self

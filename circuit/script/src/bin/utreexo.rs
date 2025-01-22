@@ -63,7 +63,9 @@ pub enum ScriptPubkeyType {
     WitnessV0ScriptHash,
 }
 
-const ELF: &[u8] = include_bytes!("../../../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo");
+const ELF: &[u8] = include_bytes!(
+    "../../../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
+);
 
 // "../../../program/utreexo/elf/riscv32im-succinct-zkvm-elf"
 
