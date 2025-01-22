@@ -16,10 +16,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Install sp1
-      run: |
-        curl -L https://sp1.succinct.xyz | bash
-        sp1up
+    - name: Install sp1 installer
+      run: curl -L https://sp1.succinct.xyz | bash
+    - name:
+      run: sp1up
     - name: Build circuit
       run: |
         cd circuit/program/utreexo
