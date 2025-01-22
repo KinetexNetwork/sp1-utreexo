@@ -3,14 +3,14 @@ use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use std::collections::HashMap;
 
-use crate::btc_structs::{BatchProof, LeafData};
+use crate::btc_structs::LeafData;
 
 pub fn process_block(
     block: &Block,
     height: u32,
     acc: &mut Pollard,
     input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash>,
-) -> BatchProof {
+) {
     let mut inputs = Vec::new();
     let mut utxos = Vec::new();
     for tx in block.txdata.iter() {
@@ -48,8 +48,4 @@ pub fn process_block(
         }
     }
     acc.modify(&utxos, &inputs).unwrap();
-    BatchProof {
-        targets: vec![],
-        hashes: vec![],
-    }
 }

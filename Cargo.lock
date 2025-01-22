@@ -1248,6 +1248,7 @@ dependencies = [
  "actix-session",
  "actix-web",
  "ahash",
+ "alloy-sol-types 0.8.15",
  "anyhow",
  "async-stream",
  "bitcoin 0.32.5",
@@ -1267,8 +1268,11 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "simplelog",
+ "sp1-helper",
+ "sp1-sdk",
  "starknet-crypto",
  "time",
+ "tokio",
 ]
 
 [[package]]
@@ -7449,6 +7453,16 @@ dependencies = [
  "git2",
  "rustversion",
  "time",
+]
+
+[[package]]
+name = "verifier-rs"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "reqwest 0.12.9",
+ "serde",
+ "sp1-sdk",
 ]
 
 [[package]]

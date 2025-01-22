@@ -26,13 +26,14 @@ pub fn main() {
 
     let mut acc = sp1_zkvm::io::read::<Pollard>();
     let input_leaf_hashes = sp1_zkvm::io::read::<HashMap<TxIn, BitcoinNodeHash>>();
-    let _proof = process_block(&block, height, &mut acc, input_leaf_hashes);
+    process_block(&block, height, &mut acc, input_leaf_hashes);
     let acc_roots: Vec<BitcoinNodeHash> = acc
         .get_roots()
         .to_vec()
         .iter()
         .map(|rc| rc.get_data())
         .collect();
+
     // TODO: have _proof and _compact_leaves as outputs instead of this
     let acc_roots_bytes: Vec<[u8; 32]> = acc_roots.iter().map(|hash| *hash.deref()).collect();
     let acc_roots_bytes_flat: Vec<u8> = acc_roots_bytes.concat();

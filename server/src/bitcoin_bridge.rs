@@ -5,10 +5,12 @@ use std::sync::Mutex;
 use std::sync::RwLock;
 
 use actix_rt::signal::ctrl_c;
+use actix_session::storage;
 use clap::Parser;
 use futures::channel::mpsc::channel;
 use log::info;
 use log::warn;
+use sp1_sdk::ProverClient;
 
 use crate::api;
 use crate::block_index::BlocksIndex;
@@ -22,6 +24,11 @@ use crate::node;
 use crate::node::Node;
 use crate::prover;
 use crate::subdir;
+use crate::zk;
+use crate::zk::ProofStorage;
+
+const ELF: &[u8] = include_bytes!("../../elf/riscv32im-succinct-zkvm-elf");
+
 
 pub fn run_bridge() -> anyhow::Result<()> {
     let cli_options = CliArgs::parse();
@@ -92,8 +99,12 @@ pub fn run_bridge() -> anyhow::Result<()> {
     // a signal used to stop the prover
     let kill_signal = Arc::new(Mutex::new(false));
 
-    //let leaf_data = HashMap::new(); // In-memory leaf storage,
-    // faster than leaf_data but uses more memory
+
+    let storage = Arc::new(ProofStorage::new());
+    
+    let prover_client = ProverClient::new();
+    let (pk, vk) = prover_client.setup(ELF);
+    
 
     let (block_notifier_tx, block_notifier_rx) = std::sync::mpsc::channel();
     let mut prover = prover::Prover::new(
@@ -108,7 +119,12 @@ pub fn run_bridge() -> anyhow::Result<()> {
         kill_signal.clone(),
         cli_options.save_proofs_after.unwrap_or(0),
         block_notifier_tx,
+        storage.clone(),
+        prover_client,
+        pk,
     );
+    info!("Starting in memory db");
+    let mut db = crate::db::InMemoryDatabase::new(storage.clone(), kill_signal.clone(), vk);
 
     info!("Starting p2p node");
 
@@ -152,12 +168,16 @@ pub fn run_bridge() -> anyhow::Result<()> {
     // create proofs for them as they are mined.
     info!("Running prover");
     std::thread::spawn(move || {
+        db.keep_up(receiver);
+    });
+
+    info!("Running in-memory db");
+    std::thread::spawn(move || {
         actix_rt::System::new().block_on(async {
             let _ = ctrl_c().await;
             warn!("Received a stop signal");
             *kill_signal.lock().unwrap() = true;
         })
     });
-
-    prover.keep_up(receiver)
+    prover.keep_up()
 }

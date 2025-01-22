@@ -20,14 +20,15 @@ use bitcoincore_rpc::jsonrpc::serde_json::json;
 use futures::channel::mpsc::Sender;
 use futures::lock::Mutex;
 use futures::SinkExt;
+use log::info;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::proof::Proof;
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::chainview::ChainView;
-use crate::prover::Requests;
-use crate::prover::Responses;
+use crate::db::Requests;
+use crate::db::Responses;
 use crate::udata::CompactLeafData;
 use crate::udata::UtreexoBlock;
 
@@ -62,17 +63,14 @@ async fn perform_request(
     receiver.await.unwrap()
 }
 
-/// the handler for the /transaction/{hash}/unpent endpoint. It returns the unspent outputs of a transaction given its hash, as well as the proof for those outpouts.
-async fn get_tx_unspent(hash: web::Path<Txid>, data: web::Data<AppState>) -> impl Responder {
-    let hash = hash.into_inner();
-    let res = perform_request(&data, Requests::GetTxUnpent(hash)).await;
+async fn get_sp1_verification_key(data: web::Data<AppState>) -> impl Responder {
+    info!("Getting SP1 verification key request");
+    let res = perform_request(&data, Requests::GetSP1VerificationKey).await;
+    info!("Got response from to SP1 verification key request from db");
     match res {
-        Ok(Responses::TransactionOut(outputs, proof)) => HttpResponse::Ok().json(json!({
+        Ok(Responses::SP1VerificationKey(key)) => HttpResponse::Ok().json(json!({
             "error": null,
-            "data": {
-                "outputs": outputs,
-                "proof": JsonProof::from(proof),
-            },
+            "data": key,
         })),
         Ok(_) => HttpResponse::InternalServerError().json(json!({
             "error": "Invalid response",
@@ -85,22 +83,17 @@ async fn get_tx_unspent(hash: web::Path<Txid>, data: web::Data<AppState>) -> imp
     }
 }
 
-/// The handler for the `/proof/{hash}` endpoint. It returns a proof for the given hash, if
-/// it exists.
-async fn get_proof(hash: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+async fn get_sp1_proof(hash: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+    info!("Getting SP1 proof request");
     let hash = hash.into_inner();
-    let hash = BitcoinNodeHash::from_str(&hash);
+    let hash = BlockHash::from_str(&hash);
 
-    if let Err(e) = hash {
-        return HttpResponse::BadRequest().body(format!("Invalid hash {e}"));
-    }
-
-    let res = perform_request(&data, Requests::GetProof(hash.unwrap())).await;
-
+    let res = perform_request(&data, Requests::GetSP1Proof(hash.unwrap())).await;
+    info!("Got response to SP1 proof request from db");
     match res {
-        Ok(Responses::Proof(proof)) => HttpResponse::Ok().json(json!({
+        Ok(Responses::SP1Proof(proof)) => HttpResponse::Ok().json(json!({
             "error": null,
-            "data": JsonProof::from(proof),
+            "data": proof,
         })),
         Ok(_) => HttpResponse::InternalServerError().json(json!({
             "error": "Invalid response",
@@ -108,138 +101,6 @@ async fn get_proof(hash: web::Path<String>, data: web::Data<AppState>) -> impl R
         })),
         Err(e) => HttpResponse::InternalServerError().json(json!({
             "error": e,
-            "data": null
-        })),
-    }
-}
-async fn get_transaction(hash: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
-    let hash = hash.into_inner();
-    let hash = Txid::from_str(&hash);
-    if let Err(e) = hash {
-        return HttpResponse::BadRequest().body(format!("Invalid hash {e}"));
-    }
-    let res = perform_request(&data, Requests::GetTransaction(hash.unwrap())).await;
-
-    match res {
-        Ok(Responses::Transaction((tx, proof))) => HttpResponse::Ok().json(json!({
-            "error": null,
-            "data": {
-                "tx": tx,
-                "proof": JsonProof::from(proof),
-            },
-        })),
-        Ok(_) => HttpResponse::InternalServerError().json(json!({
-            "error": "Invalid response",
-            "data": null
-        })),
-        Err(e) => HttpResponse::InternalServerError().json(json!({
-            "error": e,
-            "data": null
-        })),
-    }
-}
-
-/// The handler for the `/block/{height}` endpoint. It returns the block at the given height.
-async fn get_block_by_height(height: web::Path<u32>, data: web::Data<AppState>) -> impl Responder {
-    let height = height.into_inner();
-    let res = perform_request(&data, Requests::GetBlockByHeight(height)).await;
-    match res {
-        Ok(Responses::Block(block)) => {
-            let block: UBlock = deserialize::<UtreexoBlock>(&block).unwrap().into();
-            HttpResponse::Ok().json(json!({ "error": null, "data": block}))
-        }
-        Ok(_) => HttpResponse::InternalServerError().json(json!({
-            "error": "Invalid response from backend",
-            "data": null
-        })),
-        Err(e) => HttpResponse::NotAcceptable().json(json!({
-            "error": e,
-            "data": null
-        })),
-    }
-}
-// Returns n blocks starting from the given height
-async fn get_n_blocks(height: web::Path<(u32, u32)>, data: web::Data<AppState>) -> impl Responder {
-    let (height, n) = height.into_inner();
-    let res = perform_request(&data, Requests::GetBlocksByHeight(height, n)).await;
-    match res {
-        Ok(Responses::Blocks(blocks)) => {
-            let blocks: Vec<UBlock> = blocks
-                .into_iter()
-                .map(|block| deserialize::<UtreexoBlock>(&block).unwrap().into())
-                .collect();
-            HttpResponse::Ok().json(json!({ "error": null, "data": blocks}))
-        }
-        Ok(_) => HttpResponse::InternalServerError().json(json!({
-            "error": "Invalid response from backend",
-            "data": null
-        })),
-        Err(e) => HttpResponse::NotAcceptable().json(json!({
-            "error": e,
-            "data": null
-        })),
-    }
-}
-/// Same as `get_roots`, but returns the leaf number of the accumulator too.
-async fn get_roots_with_leaf(data: web::Data<AppState>) -> Result<HttpResponse, actix_web::Error> {
-    let res = perform_request(&data, Requests::GetCSN).await;
-    match res {
-        Ok(Responses::CSN(acc)) => Ok(HttpResponse::Ok().json(json!({
-            "error": null,
-            "data": acc
-        }))),
-        Ok(_) => Ok(HttpResponse::InternalServerError().json(json!({
-            "error": "Invalid response",
-            "data": null
-        }))),
-        Err(e) => Ok(HttpResponse::NotAcceptable().json(json!({
-            "error": e,
-            "data": null
-        }))),
-    }
-}
-/// The handler for the `/roots` endpoint. It returns the roots of the accumulator.
-async fn get_roots(data: web::Data<AppState>) -> HttpResponse {
-    let res = perform_request(&data, Requests::GetRoots).await;
-    match res {
-        Ok(Responses::Roots(roots)) => {
-            let roots = roots.iter().map(|x| x.to_string()).collect::<Vec<String>>();
-
-            HttpResponse::Ok().json(json!({
-                "error": null,
-                "data": roots
-            }))
-        }
-        Ok(_) => HttpResponse::InternalServerError().json(json!({
-            "error": "Invalid response",
-            "data": null
-        })),
-        Err(e) => HttpResponse::NotAcceptable().json(json!({
-            "error": e,
-            "data": null
-        })),
-    }
-}
-
-async fn get_roots_for_block(
-    hash: web::Path<BlockHash>,
-    data: web::Data<AppState>,
-) -> HttpResponse {
-    let hash = hash.into_inner();
-    match data.view.get_acc(hash) {
-        Ok(Some(acc)) => {
-            let acc = acc.iter().map(|x| x.to_string()).collect::<Vec<String>>();
-            HttpResponse::Ok().json(json!({
-                "error": null,
-                "data": acc
-            }))
-        }
-        Ok(None) => HttpResponse::NotFound().json(json!({
-            "error": "No roots found for this block",
-            "data": null
-        })),
-        Err(e) => HttpResponse::InternalServerError().json(json!({
-            "error": e.to_string(),
             "data": null
         })),
     }
@@ -263,14 +124,8 @@ pub async fn create_api(
         App::new()
             .wrap(cors)
             .app_data(app_state.clone())
-            .route("/prove/{leaf}", web::get().to(get_proof))
-            .route("/roots", web::get().to(get_roots))
-            .route("/block/{height}", web::get().to(get_block_by_height))
-            .route("/tx/{hash}/outputs", web::get().to(get_transaction))
-            .route("/acc", web::get().to(get_roots_with_leaf))
-            .route("/batch_block/{height}/{n}", web::get().to(get_n_blocks))
-            .route("/roots/{hash}", web::get().to(get_roots_for_block))
-            .route("/tx/{hash}/unspent", web::get().to(get_tx_unspent))
+            .route("/sp1/{hash}", web::get().to(get_sp1_proof))
+            .route("/sp1/verification-key", web::get().to(get_sp1_verification_key))
     })
     .bind(host)?
     .run()

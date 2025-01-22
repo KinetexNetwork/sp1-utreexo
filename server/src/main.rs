@@ -41,6 +41,8 @@ mod chainview;
 mod cli;
 mod leaf_cache;
 mod udata;
+mod zk;
+mod db;
 
 use std::env;
 
