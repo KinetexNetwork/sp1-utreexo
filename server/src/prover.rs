@@ -604,7 +604,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
 
         self.view.save_acc(ser_acc, block.block_hash());
 
-        if self.time_since_last_backup.elapsed().as_secs() > 15 {
+        if self.time_since_last_backup.elapsed().as_secs() > 60 * 30 {
             self.create_backup();
             self.time_since_last_backup = std::time::Instant::now();
         }
