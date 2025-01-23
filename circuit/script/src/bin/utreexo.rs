@@ -63,7 +63,9 @@ pub enum ScriptPubkeyType {
     WitnessV0ScriptHash,
 }
 
-const ELF: &[u8] = include_bytes!("../../../../elf/riscv32im-succinct-zkvm-elf");
+const ELF: &[u8] = include_bytes!(
+    "../../../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
+);
 
 // "../../../program/utreexo/elf/riscv32im-succinct-zkvm-elf"
 
@@ -181,7 +183,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut available_tx_counts = get_block_heights("../acc-data/").unwrap();
     available_tx_counts.sort();
-    available_tx_counts = vec![2, 3, 4, 5, 6, 13];
     if args.exact.is_some() {
         available_tx_counts = vec![args.exact.unwrap()];
     }
@@ -220,8 +221,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         stdin.write::<HashMap<TxIn, BitcoinNodeHash>>(&input_leaf_hashes);
 
         if args.execute {
-            let client = ProverClient::new();
-            let public_values = client.execute(ELF, stdin).run().unwrap();
+            let client = ProverClient::from_env();
+            let public_values = client.execute(ELF, &stdin).run().unwrap();
             let actual_bytes = public_values.0.as_slice();
             let expected_bytes = get_output_bytes(&acc_after_path);
             let unexpected_bytes = get_output_bytes(&acc_before_path);
@@ -255,12 +256,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             serde_json::to_writer_pretty(file, &metrics)?;
             println!("Report saved to ../metrics/{}.json", tx_count);
         } else {
-            let client = ProverClient::new();
+            let client = ProverClient::from_env();
             let (pk, vk) = client.setup(ELF);
 
             let start = Instant::now();
             let proof = client
-                .prove(&pk, stdin)
+                .prove(&pk, &stdin)
                 .run()
                 .expect("failed to generate proof");
             let duration = start.elapsed();

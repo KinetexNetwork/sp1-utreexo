@@ -19,12 +19,12 @@ jobs:
     - name: Install sp1
       run: |
         curl -L https://sp1.succinct.xyz | bash
-        ~/.sp1/bin/sp1up -C 459fac7
-        ~/.sp1/bin/cargo-prove prove --version
+        export PATH="$PATH:$HOME/.sp1/bin"
+        sp1up -v v4.0.1
     - name: Build circuit
       run: |
         cd circuit/program/utreexo
-        ~/.sp1/bin/cargo-prove prove build
+        cargo-prove prove build
     - name: Build
       run: cargo build --workspace --exclude btcx-program-utreexo --exclude utreexo-script
     - name: Run unit tests
