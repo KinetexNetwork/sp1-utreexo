@@ -27,7 +27,7 @@ use crate::subdir;
 use crate::zk;
 use crate::zk::ProofStorage;
 
-const ELF: &[u8] = include_bytes!("../../elf/riscv32im-succinct-zkvm-elf");
+const ELF: &[u8] = include_bytes!("../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo");
 
 
 pub fn run_bridge() -> anyhow::Result<()> {

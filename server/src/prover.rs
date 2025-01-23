@@ -16,6 +16,7 @@ use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
+use fs_extra::dir::{self, CopyOptions};
 
 use bitcoin::consensus::serialize;
 use bitcoin::consensus::Encodable;
@@ -125,6 +126,9 @@ pub struct Prover<LeafStorage: LeafCache, Storage: BlockStorage> {
 
     prover_client: ProverClient,
     proving_key: SP1ProvingKey,
+
+
+    time_since_last_backup: std::time::Instant,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -146,6 +150,11 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         prover_client: ProverClient,
         proving_key: SP1ProvingKey,
     ) -> Prover<LeafStorage, Storage> {
+        if start_height.is_some() {
+            info!("Start height manually provided");
+        } else {
+            info!("No start height provided, trying to load from disk");
+        }
         let height = start_height.unwrap_or_else(|| index_database.load_height() as u32);
         info!("Loaded height {}", height);
         info!("Loading accumulator data...");
@@ -166,6 +175,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             zk_proof_storage,
             prover_client,
             proving_key,
+            time_since_last_backup: std::time::Instant::now(),
         }
     }
 
@@ -557,6 +567,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
                     );
 
                     if flush {
+                        info!("Flushing leaf data, height={}", height);
                         self.leaf_data.flush();
                         self.save_to_disk(None)
                             .expect("could not save the acc to disk");
@@ -568,20 +579,21 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
 
         let proof = self.acc.prove(&inputs).unwrap();
 
-        if !self.zk_proof_storage.keys().contains(&block.block_hash()) {
-            // do some zk stuff
-            let flagged_pollard = self.acc.clone().fake_modify(&utxos, &inputs);
-            let stripped_pollard = flagged_pollard.get_stripped_pollard();
-            let sp1_proof = zk::run_circuit(block, stripped_pollard, &input_leaf_hashes, height, &self.prover_client, &self.proving_key);
-            let public_values = sp1_proof.public_values.as_slice();
-            self.acc.modify(&utxos, &inputs).unwrap();
-            let expected_public_values = zk::get_expected_output(&self.acc);
-            assert_eq!(public_values, expected_public_values);
-            self.zk_proof_storage
-                .add_proof(block.block_hash(), sp1_proof.proof);
-        } else {
-            self.acc.modify(&utxos, &inputs).unwrap();
-        }
+        // if !self.zk_proof_storage.keys().contains(&block.block_hash()) {
+        //     // do some zk stuff
+        //     let flagged_pollard = self.acc.clone().fake_modify(&utxos, &inputs);
+        //     let stripped_pollard = flagged_pollard.get_stripped_pollard();
+        //     let sp1_proof = zk::run_circuit(block, stripped_pollard, &input_leaf_hashes, height, &self.prover_client, &self.proving_key);
+        //     let public_values = sp1_proof.public_values.as_slice();
+        //     self.acc.modify(&utxos, &inputs).unwrap();
+        //     let expected_public_values = zk::get_expected_output(&self.acc);
+        //     assert_eq!(public_values, expected_public_values);
+        //     self.zk_proof_storage
+        //         .add_proof(block.block_hash(), sp1_proof.proof);
+        // } else {
+        //     self.acc.modify(&utxos, &inputs).unwrap();
+        // }
+        self.acc.modify(&utxos, &inputs).unwrap(); // rm this when uncomment above
 
         let mut ser_acc = Vec::new();
 
@@ -592,7 +604,59 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
 
         self.view.save_acc(ser_acc, block.block_hash());
 
+        if self.time_since_last_backup.elapsed().as_secs() > 15 {
+            self.create_backup();
+            self.time_since_last_backup = std::time::Instant::now();
+        }
+
         (proof, compact_leaves)
+    }
+
+    fn create_backup(&mut self) {
+        info!("Creating backup");
+        self.shutdown();
+        self.save_to_disk(None)
+            .expect("could not save the acc to disk");
+        self.storage.update_height(self.height as usize);
+        info!("Data dumped to disk, copying to backup dir");
+        let home_dir = std::env::var("HOME").expect("HOME environment variable is not set");
+        let base_backup_dir_pathbuf: PathBuf = [home_dir.clone(), ".bridge-backup".to_string()].iter().collect();
+        let base_backup_dir = base_backup_dir_pathbuf.to_str().unwrap();
+        if !Path::new(base_backup_dir).exists() {
+            fs::create_dir(base_backup_dir).unwrap();
+        }
+        let backup_name = format!("{}/backup-{}", base_backup_dir, self.height);
+        dir::create(backup_name.clone(), true).unwrap();
+
+        let source_pathbuf: PathBuf = [home_dir, ".bridge".to_string()].iter().collect();
+        let source = source_pathbuf.to_str().unwrap();
+
+        let destination = Path::new(&backup_name);
+        let mut options = CopyOptions::new();
+        options.overwrite = true; // Overwrite existing files in the destination
+        options.copy_inside = true; // Copy the content of the source directory, not the directory itself
+        dir::copy(source, destination, &options);
+
+        info!("Backup created at {}", backup_name);
+        info!("Removing old backups");
+        
+        let backups = fs::read_dir(base_backup_dir).unwrap();
+        let backups_number = backups.count();
+        if backups_number > 2 {
+            let mut backups = fs::read_dir(base_backup_dir).unwrap();
+            let mut oldest = backups.next().unwrap().unwrap();
+            let mut oldest_time = oldest.metadata().unwrap().created().unwrap();
+            for entry in backups {
+                let entry = entry.unwrap();
+                let time = entry.metadata().unwrap().created().unwrap();
+                if time < oldest_time {
+                    oldest = entry;
+                    oldest_time = time;
+                }
+            }
+            fs::remove_dir_all(oldest.path()).unwrap();
+            info!("Removed oldest backup");
+        }
     }
 }
 

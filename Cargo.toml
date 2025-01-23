@@ -3,5 +3,5 @@ members = [
     "rustreexo",
     "server",
     "circuit/script",
-    "circuit/program/utreexo", "input-generator", "verifier-rs",
+    "circuit/program/utreexo", "input-generator",
 ]
