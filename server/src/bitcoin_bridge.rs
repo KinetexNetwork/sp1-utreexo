@@ -10,7 +10,6 @@ use clap::Parser;
 use futures::channel::mpsc::channel;
 use log::info;
 use log::warn;
-use sp1_sdk::ProverClient;
 
 use crate::block_index::BlocksIndex;
 use crate::blockfile::BlockFile;
