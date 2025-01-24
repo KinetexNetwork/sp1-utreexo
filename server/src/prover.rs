@@ -39,8 +39,6 @@ use rustreexo::accumulator::proof::Proof;
 use rustreexo::accumulator::stump::Stump;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::to_writer_pretty;
-use sp1_sdk::{SP1Proof, ProverClient, SP1ProvingKey};
 
 use crate::block_index::BlockIndex;
 use crate::block_index::BlocksIndex;
@@ -49,7 +47,6 @@ use crate::chainview;
 use crate::udata::LeafContext;
 use crate::udata::LeafData;
 use crate::udata::UtreexoBlock;
-use crate::zk;
 
 #[cfg(not(feature = "shinigami"))]
 pub type AccumulatorHash = rustreexo::accumulator::node_hash::BitcoinNodeHash;
@@ -121,13 +118,6 @@ pub struct Prover<LeafStorage: LeafCache, Storage: BlockStorage> {
     block_notification: Sender<BlockHash>,
     ibd: bool,
 
-
-    zk_proof_storage: Arc<zk::ProofStorage>,
-
-    prover_client: ProverClient,
-    proving_key: SP1ProvingKey,
-
-
     time_since_last_backup: std::time::Instant,
 }
 
@@ -146,9 +136,6 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         shutdown_flag: Arc<Mutex<bool>>,
         save_proofs_for_blocks_older_than: u32,
         block_notification: Sender<BlockHash>,
-        zk_proof_storage: Arc<zk::ProofStorage>,
-        prover_client: ProverClient,
-        proving_key: SP1ProvingKey,
     ) -> Prover<LeafStorage, Storage> {
         if start_height.is_some() {
             info!("Start height manually provided");
@@ -172,9 +159,6 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             save_proofs_for_blocks_older_than,
             block_notification,
             ibd: true,
-            zk_proof_storage,
-            prover_client,
-            proving_key,
             time_since_last_backup: std::time::Instant::now(),
         }
     }
@@ -697,6 +681,4 @@ pub enum Responses {
     /// Multiple blocks and utreexo data for them.
     Blocks(Vec<Vec<u8>>),
     TransactionOut(Vec<TxOut>, Proof),
-
-    SP1Proof(SP1Proof),
 }

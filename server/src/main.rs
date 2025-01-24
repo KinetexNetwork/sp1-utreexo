@@ -18,9 +18,6 @@ compile_error!("This combination is not supported yet");
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-#[cfg(feature = "api")]
-mod api;
-
 #[cfg(not(feature = "shinigami"))]
 mod blockfile;
 
@@ -41,8 +38,6 @@ mod chainview;
 mod cli;
 mod leaf_cache;
 mod udata;
-mod zk;
-mod db;
 
 use std::env;
 

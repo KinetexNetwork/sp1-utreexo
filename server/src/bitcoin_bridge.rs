@@ -12,7 +12,6 @@ use log::info;
 use log::warn;
 use sp1_sdk::ProverClient;
 
-use crate::api;
 use crate::block_index::BlocksIndex;
 use crate::blockfile::BlockFile;
 use crate::chainview;
@@ -24,11 +23,6 @@ use crate::node;
 use crate::node::Node;
 use crate::prover;
 use crate::subdir;
-use crate::zk;
-use crate::zk::ProofStorage;
-
-const ELF: &[u8] = include_bytes!("../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo");
-
 
 pub fn run_bridge() -> anyhow::Result<()> {
     let cli_options = CliArgs::parse();
@@ -99,13 +93,6 @@ pub fn run_bridge() -> anyhow::Result<()> {
     // a signal used to stop the prover
     let kill_signal = Arc::new(Mutex::new(false));
 
-
-    let storage = Arc::new(ProofStorage::new());
-    
-    let prover_client = ProverClient::new();
-    let (pk, vk) = prover_client.setup(ELF);
-    
-
     let (block_notifier_tx, block_notifier_rx) = std::sync::mpsc::channel();
     let mut prover = prover::Prover::new(
         client,
@@ -119,13 +106,7 @@ pub fn run_bridge() -> anyhow::Result<()> {
         kill_signal.clone(),
         cli_options.save_proofs_after.unwrap_or(0),
         block_notifier_tx,
-        storage.clone(),
-        prover_client,
-        pk,
     );
-    info!("Starting in memory db");
-    let mut db = crate::db::InMemoryDatabase::new(storage.clone(), kill_signal.clone(), vk);
-
     info!("Starting p2p node");
 
     // This is our implementation of the Bitcoin p2p protocol, it will listen
@@ -152,26 +133,10 @@ pub fn run_bridge() -> anyhow::Result<()> {
         Node::accept_connections(node);
     });
 
-    let (sender, receiver) = channel(1024);
-
-    // This is our implementation of the json-rpc api, it will listen for
-    // incoming connections and serve some Utreexo data to clients.
-    info!("Starting api");
-    let host = env::var("API_HOST").unwrap_or_else(|_| "127.0.0.1:3000".into());
-    std::thread::spawn(move || {
-        actix_rt::System::new()
-            .block_on(api::create_api(sender, view, &host))
-            .unwrap()
-    });
-
     // Keep the prover running in the background, it will download blocks and
     // create proofs for them as they are mined.
     info!("Running prover");
-    std::thread::spawn(move || {
-        db.keep_up(receiver);
-    });
 
-    info!("Running in-memory db");
     std::thread::spawn(move || {
         actix_rt::System::new().block_on(async {
             let _ = ctrl_c().await;
