@@ -31,7 +31,7 @@ actix-rt = "2.8.0"
 hex = "0.4.3"
 log = "0.4.19"
 simplelog = "0.12.1"
-reqwest = { version = "0.11.18", features = [
+reqwest = { version = "0.12.12", features = [
     "blocking",
     "rustls",
     "__tls",
@@ -49,13 +49,8 @@ ahash = "0.8.11"
 ctrlc = "3.4.5"
 fs_extra = "1.3"
 
-sp1-sdk = { git = "https://github.com/succinctlabs/sp1.git", rev = "459fac7" }
 alloy-sol-types = "0.8.7"
 tokio = { version = "1", features = ["full"] }
-
-
-[build-dependencies]
-sp1-helper = { git = "https://github.com/succinctlabs/sp1.git", rev = "459fac7" }
 
 [features]
 default = ["bitcoin", "node", "api"]
