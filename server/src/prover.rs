@@ -38,7 +38,6 @@ use rustreexo::accumulator::proof::Proof;
 use rustreexo::accumulator::stump::Stump;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::to_writer_pretty;
 
 use crate::block_index::BlockIndex;
 use crate::block_index::BlocksIndex;
@@ -135,6 +134,11 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         save_proofs_for_blocks_older_than: u32,
         block_notification: Sender<BlockHash>,
     ) -> Prover<LeafStorage, Storage> {
+        if start_height.is_some() {
+            info!("Start height manually provided");
+        } else {
+            info!("No start height provided, trying to load from disk");
+        }
         let height = start_height.unwrap_or_else(|| index_database.load_height() as u32);
         info!("Loaded height {}", height);
         info!("Loading accumulator data...");
@@ -187,6 +191,14 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         use bitcoin::Witness;
 
         match req {
+            // Requests::GetSP1Proof(block_hash) => {
+            //     let proof = self
+            //         .zk_proof_storage
+            //         .get_proof(&block_hash)
+            //         .ok_or(anyhow::anyhow!("Proof not found"))?;
+            //     info!("Prover returned proof: {:#?}", proof);
+            //     Ok(Responses::SP1Proof(proof))
+            // }
             Requests::GetProof(node) => {
                 let proof = self
                     .acc
@@ -312,6 +324,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
                 }
                 Ok(Responses::Blocks(blocks))
             }
+            _ => Err(anyhow::anyhow!("Uniplemented request in prover")),
         }
     }
 
@@ -343,25 +356,13 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
     /// also how we create proofs for historical blocks.
     pub fn keep_up(
         &mut self,
-        #[cfg(feature = "api")] mut receiver: Receiver<(
-            Requests,
-            futures::channel::oneshot::Sender<Result<Responses, String>>,
-        )>,
     ) -> anyhow::Result<()> {
         let mut last_tip_update = std::time::Instant::now();
         loop {
-            let start = std::time::Instant::now();
             if *self.shutdown_flag.lock().unwrap() {
                 info!("Shutting down prover");
                 self.shutdown();
                 break;
-            }
-
-            #[cfg(feature = "api")]
-            if let Ok(Some((req, res))) = receiver.try_next() {
-                let ret = self.handle_request(req).map_err(|e| e.to_string());
-                res.send(ret)
-                    .map_err(|_| anyhow::anyhow!("Error sending response"))?;
             }
 
             if last_tip_update.elapsed().as_secs() > 10 {
@@ -372,8 +373,6 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             }
 
             std::thread::sleep(std::time::Duration::from_micros(100));
-            let elapsed = start.elapsed();
-            info!("Event loop cycle took {}", elapsed.as_nanos());
         }
         self.save_to_disk(None)
             .expect("could not save the acc to disk");
@@ -503,38 +502,6 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
 
     /// Processes a block and returns the batch proof and the compact leaf data for the block.
     fn process_block(&mut self, block: &Block, height: u32, mtp: u32) -> (Proof, Vec<LeafContext>) {
-        let tx_count = block.txdata.len();
-        let mut is_interesting = !Path::new(format!("acc-datas/block-{}txs", tx_count).as_str())
-            .exists()
-            && (tx_count % 100 == 0 || tx_count < 10);
-
-        if height >= 876000 {
-            is_interesting = true;
-        }
-        if is_interesting {
-            fs::create_dir(format!("acc-datas/block-{}txs", tx_count).as_str()).unwrap()
-        }
-
-        if is_interesting {
-            let mut file =
-                File::create(format!("acc-datas/block-{tx_count}txs/block.txt")).unwrap();
-            let serialized_block = bitcoin::consensus::serialize(block);
-            file.write_all(&serialized_block).unwrap();
-            file.flush().unwrap();
-        }
-        if is_interesting {
-            let mut file =
-                File::create(format!("acc-datas/block-{tx_count}txs/block-height.txt")).unwrap();
-            writeln!(file, "{:#?}", height).unwrap();
-            file.flush().unwrap();
-        }
-        if is_interesting {
-            let file =
-                File::create(format!("acc-datas/block-{tx_count}txs/acc-beffore.txt")).unwrap();
-            let acc_cloned = self.acc.clone();
-            acc_cloned.serialize(file).unwrap();
-        }
-
         let mut inputs = Vec::new();
         let mut utxos = Vec::new();
         let mut compact_leaves = Vec::new();
@@ -580,6 +547,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
                     );
 
                     if flush {
+                        info!("Flushing leaf data, height={}", height);
                         self.leaf_data.flush();
                         self.save_to_disk(None)
                             .expect("could not save the acc to disk");
@@ -590,7 +558,22 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         }
 
         let proof = self.acc.prove(&inputs).unwrap();
-        self.acc.modify(&utxos, &inputs).unwrap();
+
+        // if !self.zk_proof_storage.keys().contains(&block.block_hash()) {
+        //     // do some zk stuff
+        //     let flagged_pollard = self.acc.clone().fake_modify(&utxos, &inputs);
+        //     let stripped_pollard = flagged_pollard.get_stripped_pollard();
+        //     let sp1_proof = zk::run_circuit(block, stripped_pollard, &input_leaf_hashes, height, &self.prover_client, &self.proving_key);
+        //     let public_values = sp1_proof.public_values.as_slice();
+        //     self.acc.modify(&utxos, &inputs).unwrap();
+        //     let expected_public_values = zk::get_expected_output(&self.acc);
+        //     assert_eq!(public_values, expected_public_values);
+        //     self.zk_proof_storage
+        //         .add_proof(block.block_hash(), sp1_proof.proof);
+        // } else {
+        //     self.acc.modify(&utxos, &inputs).unwrap();
+        // }
+        self.acc.modify(&utxos, &inputs).unwrap(); // rm this when uncomment above
 
         let mut ser_acc = Vec::new();
 
@@ -600,26 +583,6 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         });
 
         self.view.save_acc(ser_acc, block.block_hash());
-
-        if is_interesting {
-            let leafs_pairs = input_leaf_hashes
-                .iter()
-                .map(|(k, v)| (k.clone(), *v))
-                .collect::<Vec<_>>();
-            let file = File::create(format!(
-                "acc-datas/block-{tx_count}txs/input-leaf-hashes.txt"
-            ))
-            .unwrap();
-            let writer = BufWriter::new(file);
-            to_writer_pretty(writer, &leafs_pairs).unwrap();
-        }
-
-        if is_interesting {
-            let file =
-                File::create(format!("acc-datas/block-{tx_count}txs/acc-after.txt")).unwrap();
-            let acc_cloned = self.acc.clone();
-            acc_cloned.serialize(file).unwrap();
-        }
 
         (proof, compact_leaves)
     }
@@ -642,6 +605,8 @@ pub enum Requests {
     /// Returns multiple blocks and utreexo data for them.
     GetBlocksByHeight(u32, u32),
     GetTxUnpent(Txid),
+    // Returns SP1 proof corresponding to utreexo mutation during this block
+    GetSP1Proof(BlockHash),
 }
 /// All responses the prover will send.
 #[derive(Clone, Debug, Serialize, Deserialize)]
