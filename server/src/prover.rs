@@ -433,6 +433,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
 
             self.height = height;
             if let Some(n) = self.snapshot_acc_every {
+                info!("doing backup");
                 if height % n == 0 {
                     self.save_to_disk(Some(height))
                         .expect("could not save the acc to disk");
