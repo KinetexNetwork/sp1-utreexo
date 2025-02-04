@@ -106,7 +106,7 @@ pub fn run_bridge() -> anyhow::Result<()> {
         cli_options.start_height,
         cli_options.acc_snapshot_every_n_blocks,
         kill_signal.clone(),
-        cli_options.save_proofs_after.unwrap_or(0),
+        cli_options.save_proofs_after.unwrap_or(50000),
         block_notifier_tx,
     );
 
