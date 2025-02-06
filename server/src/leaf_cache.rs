@@ -30,7 +30,7 @@ impl LeafCache for DiskLeafStorage {
     fn insert(&mut self, outpoint: OutPoint, leaf_data: LeafContext) -> bool {
         self.cache
             .insert(outpoint, (leaf_data.block_height, leaf_data));
-        self.cache.len() > 100_000
+        self.cache.len() > 1_000_000
     }
 
     fn remove(&mut self, outpoint: &OutPoint) -> Option<LeafContext> {
