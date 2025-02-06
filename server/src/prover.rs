@@ -576,15 +576,6 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         // }
         self.acc.modify(&utxos, &inputs).unwrap(); // rm this when uncomment above
 
-        let mut ser_acc = Vec::new();
-
-        self.acc.leaves.consensus_encode(&mut ser_acc).unwrap();
-        self.acc.get_roots().iter().for_each(|x| {
-            x.get_data().consensus_encode(&mut ser_acc).unwrap();
-        });
-
-        self.view.save_acc(ser_acc, block.block_hash());
-
         (proof, compact_leaves)
     }
 }
