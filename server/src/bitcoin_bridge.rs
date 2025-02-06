@@ -112,44 +112,6 @@ pub fn run_bridge() -> anyhow::Result<()> {
         block_notifier_tx,
     );
 
-    info!("Starting p2p node");
-
-    // This is our implementation of the Bitcoin p2p protocol, it will listen
-    // for incoming connections and serve blocks and proofs to peers.
-    let p2p_port = env::var("P2P_PORT").unwrap_or_else(|_| "8333".into());
-    let p2p_address = format!(
-        "{}:{}",
-        env::var("P2P_HOST").unwrap_or_else(|_| "0.0.0.0".into()),
-        p2p_port
-    );
-
-    let listener = std::net::TcpListener::bind(p2p_address).unwrap();
-
-    let node = node::Node::new(
-        listener,
-        blocks,
-        index_store,
-        view.clone(),
-        block_notifier_rx,
-        cli_options.network.magic(),
-    );
-
-    std::thread::spawn(move || {
-        Node::accept_connections(node);
-    });
-
-    let (sender, receiver) = channel(1024);
-
-    // This is our implementation of the json-rpc api, it will listen for
-    // incoming connections and serve some Utreexo data to clients.
-    info!("Starting api");
-    let host = env::var("API_HOST").unwrap_or_else(|_| "127.0.0.1:3000".into());
-    std::thread::spawn(move || {
-        actix_rt::System::new()
-            .block_on(api::create_api(sender, view, &host))
-            .unwrap()
-    });
-
     // Keep the prover running in the background, it will download blocks and
     // create proofs for them as they are mined.
     info!("Running prover");
