@@ -1344,12 +1344,6 @@ dependencies = [
 
 [[package]]
 name = "bitcoin_hashes"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90064b8dee6815a6470d60bad07bbbaee885c0e12d04177138fa3291a01b7bc4"
-
-[[package]]
-name = "bitcoin_hashes"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb18c03d0db0247e147a21a6faafd5a7eb851c743db062de72018b6b7e8e4d16"
@@ -1485,7 +1479,7 @@ dependencies = [
  "anyhow",
  "async-stream",
  "bitcoin 0.32.5",
- "bitcoin_hashes 0.11.0",
+ "bitcoin_hashes 0.16.0",
  "bitcoincore-rpc",
  "clap",
  "ctrlc",
