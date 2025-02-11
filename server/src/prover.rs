@@ -39,6 +39,9 @@ use rustreexo::accumulator::stump::Stump;
 use serde::Deserialize;
 use serde::Serialize;
 
+use std::io::{self, BufReader};
+
+
 use crate::block_index::BlockIndex;
 use crate::block_index::BlocksIndex;
 use crate::chaininterface::Blockchain;
@@ -179,6 +182,56 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             Ok(acc) => acc,
             Err(_) => Pollard::new(),
         }
+    }
+
+    fn try_from_dump(path: &str) -> Pollard {
+
+        #[derive(Debug)]
+        struct UTXO {
+            txid: String,
+            vout: u32,
+            value: u64,
+            script_pubkey: Vec<u8>,
+        }
+
+        let mut utxos = Vec::new();
+        let file = File::open(path).expect("Failed to open UTXO file");
+        let mut reader = BufReader::new(file);
+
+        loop {
+            let mut txid = [0u8; 32];
+            if reader.read_exact(&mut txid).is_err() {
+                break;
+            }
+
+            let mut vout = [0u8; 4];
+            reader.read_exact(&mut vout).expect("Failed to read vout");
+            let vout = u32::from_le_bytes(vout);
+
+            let mut value = [0u8; 8];
+            reader.read_exact(&mut value).expect("Failed to read value");
+            let value = u64::from_le_bytes(value);
+
+            let mut script_len = [0u8; 1];
+            reader
+                .read_exact(&mut script_len)
+                .expect("Failed to read script length");
+            let script_len = script_len[0] as usize;
+
+            let mut script_pubkey = vec![0u8; script_len];
+            reader
+                .read_exact(&mut script_pubkey)
+                .expect("Failed to read script");
+
+            utxos.push(UTXO {
+                txid: hex::encode(txid),
+                vout,
+                value,
+                script_pubkey,
+            });
+        }
+
+        utxos
     }
 
     /// Handles the request from another module. It returns a response through the oneshot channel
@@ -354,9 +407,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
     /// A infinite loop that keeps the prover up to date with the blockchain. It handles requests
     /// from other modules and updates the accumulator when a new block is found. This method is
     /// also how we create proofs for historical blocks.
-    pub fn keep_up(
-        &mut self,
-    ) -> anyhow::Result<()> {
+    pub fn keep_up(&mut self) -> anyhow::Result<()> {
         let mut last_tip_update = std::time::Instant::now();
         loop {
             if *self.shutdown_flag.lock().unwrap() {
