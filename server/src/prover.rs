@@ -184,55 +184,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         }
     }
 
-    fn try_from_dump(path: &str) -> Pollard {
 
-        #[derive(Debug)]
-        struct UTXO {
-            txid: String,
-            vout: u32,
-            value: u64,
-            script_pubkey: Vec<u8>,
-        }
-
-        let mut utxos = Vec::new();
-        let file = File::open(path).expect("Failed to open UTXO file");
-        let mut reader = BufReader::new(file);
-
-        loop {
-            let mut txid = [0u8; 32];
-            if reader.read_exact(&mut txid).is_err() {
-                break;
-            }
-
-            let mut vout = [0u8; 4];
-            reader.read_exact(&mut vout).expect("Failed to read vout");
-            let vout = u32::from_le_bytes(vout);
-
-            let mut value = [0u8; 8];
-            reader.read_exact(&mut value).expect("Failed to read value");
-            let value = u64::from_le_bytes(value);
-
-            let mut script_len = [0u8; 1];
-            reader
-                .read_exact(&mut script_len)
-                .expect("Failed to read script length");
-            let script_len = script_len[0] as usize;
-
-            let mut script_pubkey = vec![0u8; script_len];
-            reader
-                .read_exact(&mut script_pubkey)
-                .expect("Failed to read script");
-
-            utxos.push(UTXO {
-                txid: hex::encode(txid),
-                vout,
-                value,
-                script_pubkey,
-            });
-        }
-
-        utxos
-    }
 
     /// Handles the request from another module. It returns a response through the oneshot channel
     /// provided by the request sender. Errors are returned as strings, maybe this should be changed
@@ -472,15 +424,6 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             let mtp = self.rpc.get_mtp(block.header.prev_blockhash)?;
 
             let (proof, leaves) = self.process_block(&block, height, mtp);
-
-            if height > self.save_proofs_for_blocks_older_than {
-                let index = self
-                    .files
-                    .write()
-                    .unwrap()
-                    .save_block(&block, height, proof, leaves, &self.acc);
-                self.storage.append(index, block.block_hash());
-            }
 
             self.height = height;
             if let Some(n) = self.snapshot_acc_every {
