@@ -5,7 +5,7 @@
 //! ```
 //! use std::str::FromStr;
 //!
-//! use rustreexo::accumulator::node_hash::NodeHash;
+//!  use rustreexo::accumulator::node_hash::NodeHash;
 //! let hash =
 //!     NodeHash::from_str("0000000000000000000000000000000000000000000000000000000000000000")
 //!         .unwrap();
