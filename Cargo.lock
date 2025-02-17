@@ -5163,7 +5163,6 @@ name = "rustreexo"
 version = "0.3.0"
 dependencies = [
  "bincode",
- "bitcoin_hashes 0.16.0",
  "serde",
  "serde_json",
  "sha2 0.10.8 (git+https://github.com/sp1-patches/RustCrypto-hashes?tag=patch-sha2-0.10.8-sp1-4.0.0)",

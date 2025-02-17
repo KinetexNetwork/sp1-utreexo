@@ -42,22 +42,18 @@
 //!         .unwrap();
 //! assert_eq!(parent, expected_parent);
 //! ```
-use std::convert::TryFrom;
+
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
-use std::str::FromStr;
 
-use bitcoin_hashes::hex;
-use bitcoin_hashes::sha256;
-use bitcoin_hashes::sha512_256;
-use bitcoin_hashes::Hash;
 #[cfg(feature = "with-serde")]
 use serde::Deserialize;
 #[cfg(feature = "with-serde")]
 use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
+
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, PartialOrd, Ord, Default)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
@@ -114,44 +110,19 @@ impl Debug for BitcoinNodeHash {
         }
     }
 }
-impl From<sha512_256::Hash> for BitcoinNodeHash {
-    fn from(hash: sha512_256::Hash) -> Self {
-        BitcoinNodeHash::Some(hash.to_byte_array())
-    }
-}
+
 impl From<[u8; 32]> for BitcoinNodeHash {
     fn from(hash: [u8; 32]) -> Self {
         BitcoinNodeHash::Some(hash)
     }
 }
+
 impl From<&[u8; 32]> for BitcoinNodeHash {
     fn from(hash: &[u8; 32]) -> Self {
         BitcoinNodeHash::Some(*hash)
     }
 }
-#[cfg(test)]
-impl TryFrom<&str> for BitcoinNodeHash {
-    type Error = hex::HexToArrayError;
-    fn try_from(hash: &str) -> Result<Self, Self::Error> {
-        // This implementation is useful for testing, as it allows to create empty hashes
-        // from the string of 64 zeros. Without this, it would be impossible to express this
-        // hash in the test vectors.
-        if hash == "0000000000000000000000000000000000000000000000000000000000000000" {
-            return Ok(BitcoinNodeHash::Empty);
-        }
-        let hash = hex::FromHex::from_hex(hash)?;
-        Ok(BitcoinNodeHash::Some(hash))
-    }
-}
 
-#[cfg(not(test))]
-impl TryFrom<&str> for BitcoinNodeHash {
-    type Error = hex::HexToArrayError;
-    fn try_from(hash: &str) -> Result<Self, Self::Error> {
-        let inner = hex::FromHex::from_hex(hash)?;
-        Ok(BitcoinNodeHash::Some(inner))
-    }
-}
 impl From<&[u8]> for BitcoinNodeHash {
     fn from(hash: &[u8]) -> Self {
         let mut inner = [0; 32];
@@ -160,17 +131,6 @@ impl From<&[u8]> for BitcoinNodeHash {
     }
 }
 
-impl From<sha256::Hash> for BitcoinNodeHash {
-    fn from(hash: sha256::Hash) -> Self {
-        BitcoinNodeHash::Some(hash.to_byte_array())
-    }
-}
-impl FromStr for BitcoinNodeHash {
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        BitcoinNodeHash::try_from(s)
-    }
-    type Err = hex::HexToArrayError;
-}
 impl BitcoinNodeHash {
     /// Tells whether this hash is empty. We use empty hashes throughout the code to represent
     /// leaves we want to delete.

@@ -89,13 +89,15 @@ async fn get_tx_unspent(hash: web::Path<Txid>, data: web::Data<AppState>) -> imp
 /// it exists.
 async fn get_proof(hash: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
     let hash = hash.into_inner();
-    let hash = BitcoinNodeHash::from_str(&hash);
-
-    if let Err(e) = hash {
+    let bytes = hex::decode(&hash);
+    if let Err(e) = bytes {
         return HttpResponse::BadRequest().body(format!("Invalid hash {e}"));
     }
+    let hash = BitcoinNodeHash::from(bytes.unwrap().as_slice());
 
-    let res = perform_request(&data, Requests::GetProof(hash.unwrap())).await;
+
+
+    let res = perform_request(&data, Requests::GetProof(hash)).await;
 
     match res {
         Ok(Responses::Proof(proof)) => HttpResponse::Ok().json(json!({
