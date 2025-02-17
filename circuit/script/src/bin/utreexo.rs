@@ -64,7 +64,7 @@ pub enum ScriptPubkeyType {
 }
 
 const ELF: &[u8] = include_bytes!(
-    "../../../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
+    "../../../program/utreexo/target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
 );
 
 // "../../../program/utreexo/elf/riscv32im-succinct-zkvm-elf"
