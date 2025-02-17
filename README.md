@@ -27,6 +27,30 @@ From very high level there are two steps:
 - run `server` following server/README.md and wait it to start processing blocks (it should be around a minute)
 - run `python3 run-end-to-end.py` from the root of the project
 
+Run with profiling:
+```
+cd circuit/script
+TRACE_FILE=output.json TRACE_SAMPLE_RATE=100 cargo run --release -- --execute --exact 5
+```
+
+Building circuit:
+```
+cd circuit/program/utreexo
+cargo prove build
+```
+May fail, try to install sp1 WITHOUT `--c-toolchain` and make envs cc and/or CC pointing to clang >=16
+
+Run circuit without generating proof with checking that utreexo roots computed in circuit and out of circuit match:
+```
+cd circuit/script
+cargo run --release -- --execute --exact 5
+```
+Run with generating proof:
+```
+SP1_PROVER=network NETWORK_PRIVATE_KEY=<YOUR_PRIVATE_KEY> cargo r --release -- --prove --exact 5
+```
+
+
 
 ## Aknowledgements
 `server` and `rustreexo` are based on the work of Davidson-Souza and mit-dci:
