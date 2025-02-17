@@ -2,54 +2,16 @@ use bitcoin::{Block, OutPoint, TxIn, Txid};
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use std::collections::HashMap;
-use bitcoin_io::{Write, ErrorKind, Result};
 use bitcoin::consensus::Encodable;
 use bitcoin_hashes::Hash;
 
-use sha2::{digest, Digest, Sha256};
+use sha2::{Digest, Sha256};
 
 use crate::btc_structs::{BatchProof, LeafData};
 
-struct VecWriter<'a>(&'a mut Vec<u8>);
-
-impl Write for VecWriter<'_> {
-    /// Writes `buf` into this writer, returning how many bytes were written.
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.0.extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    /// Flushes this output stream, ensuring that all intermediately buffered contents
-    /// reach their destination.
-    fn flush(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    /// Attempts to write an entire buffer into this writer.
-    #[inline]
-    fn write_all(&mut self, mut buf: &[u8]) -> Result<()> {
-        while !buf.is_empty() {
-            match self.write(buf) {
-                Ok(0) => return Err(ErrorKind::UnexpectedEof.into()),
-                Ok(len) => buf = &buf[len..],
-                Err(e) if e.kind() == ErrorKind::Interrupted => {}
-                Err(e) => return Err(e),
-            }
-        }
-        Ok(())
-    }
-}
-
-impl<'a> VecWriter<'a> {
-    fn new(v: &'a mut Vec<u8>) -> Self {
-        VecWriter(v)
-    }
-}
-    
 
 fn compute_txid(tx: &bitcoin::Transaction) -> bitcoin::Txid {
     let mut tx_bytes = Vec::new();
-    let mut writer = VecWriter::new(&mut tx_bytes);
     
     tx.version.consensus_encode(&mut tx_bytes).expect("engines don't error");
     tx.input.consensus_encode(&mut tx_bytes).expect("engines don't error");

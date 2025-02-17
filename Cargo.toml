@@ -3,5 +3,8 @@ members = [
     "rustreexo",
     "server",
     "circuit/script",
-    "circuit/program/utreexo", "input-generator",
+     "input-generator",
+]
+exclude = [
+    "circuit/program/utreexo",
 ]
