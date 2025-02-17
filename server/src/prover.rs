@@ -89,9 +89,7 @@ impl LeafCache for HashMap<OutPoint, LeafContext> {
 }
 
 /// All the state that the prover needs to keep track of
-pub struct Prover<LeafStorage: LeafCache, Storage: BlockStorage> {
-    /// A reference to a file manager that holds the blocks on disk, using flat files.
-    files: Arc<RwLock<Storage>>,
+pub struct Prover<LeafStorage: LeafCache> {
     /// A reference to the RPC client that is used to query the blockchain.
     rpc: Box<dyn Blockchain>,
     /// The accumulator that holds the state of the utreexo accumulator.
@@ -122,12 +120,11 @@ pub struct Prover<LeafStorage: LeafCache, Storage: BlockStorage> {
 }
 
 #[allow(clippy::too_many_arguments)]
-impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage> {
+impl<LeafStorage: LeafCache> Prover<LeafStorage> {
     /// Creates a new prover. It loads the accumulator from disk, if it exists.
     pub fn new(
         rpc: Box<dyn Blockchain>,
         index_database: Arc<BlocksIndex>,
-        files: Arc<RwLock<Storage>>,
         view: Arc<chainview::ChainView>,
         leaf_data: LeafStorage,
         start_acc: Option<PathBuf>,
@@ -136,7 +133,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
         shutdown_flag: Arc<Mutex<bool>>,
         save_proofs_for_blocks_older_than: u32,
         block_notification: Sender<BlockHash>,
-    ) -> Prover<LeafStorage, Storage> {
+    ) -> Prover<LeafStorage> {
         if start_height.is_some() {
             info!("Start height manually provided");
         } else {
@@ -152,7 +149,6 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
             acc,
             height,
             storage: index_database,
-            files,
             view,
             leaf_data,
             shutdown_flag,
@@ -216,25 +212,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
                 Ok(Responses::Roots(roots))
             }
             Requests::GetBlockByHeight(height) => {
-                let hash = self
-                    .rpc
-                    .get_block_hash(height as u64)
-                    .map_err(|_| anyhow::anyhow!("Block at height {} not found", height))?;
-                let block = self.storage.get_index(hash).ok_or(anyhow::anyhow!(
-                    "Block at height {} not found in storage",
-                    height
-                ))?;
-
-                let block = self
-                    .files
-                    .read()
-                    .unwrap()
-                    .get_block(block)
-                    .ok_or(anyhow::anyhow!(
-                        "Block at height {} not found in files",
-                        height
-                    ))?;
-                Ok(Responses::Block(serialize(&block)))
+                unimplemented!()
             }
             Requests::GetTxUnpent(txid) => {
                 // returns the unspent outputs of a transaction and a proof for them
@@ -309,25 +287,7 @@ impl<LeafStorage: LeafCache, Storage: BlockStorage> Prover<LeafStorage, Storage>
                 Ok(Responses::CSN(Stump { roots, leaves }))
             }
             Requests::GetBlocksByHeight(height, count) => {
-                let mut blocks = Vec::new();
-                for i in height..height + count {
-                    let Some(hash) = self.view.get_block_hash(i)? else {
-                        break;
-                    };
-                    let block = self.storage.get_index(hash).ok_or(anyhow::anyhow!(
-                        "Block at height {} not found in storage",
-                        i
-                    ))?;
-
-                    let block = self
-                        .files
-                        .read()
-                        .unwrap()
-                        .get_block(block)
-                        .ok_or(anyhow::anyhow!("Block at height {} not found in files", i))?;
-                    blocks.push(serialize(&block));
-                }
-                Ok(Responses::Blocks(blocks))
+                unimplemented!();
             }
             _ => Err(anyhow::anyhow!("Uniplemented request in prover")),
         }

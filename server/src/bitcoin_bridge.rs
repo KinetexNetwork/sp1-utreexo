@@ -71,14 +71,6 @@ pub fn run_bridge() -> anyhow::Result<()> {
     // Put it into an Arc so we can share it between threads
     let index_store = Arc::new(index_store);
 
-    // This database stores the blocks themselves, it's a collection of flat files
-    // that are indexed by the index above. They are stored in the `blocks/` directory
-    // and are serialized as bitcoin blocks, so we don't need to do any parsing
-    // before sending to a peer.
-    let blocks = Arc::new(RwLock::new(
-        BlockFile::new(subdir("blocks").into(), 10_000_000_000).expect("Could not open block file"),
-    ));
-
     // The prover needs some way to pull blocks from a trusted source, we can use anything
     // implementing the [Blockchain] trait, for example a bitcoin core node or an esplora
     // instance.
@@ -96,12 +88,11 @@ pub fn run_bridge() -> anyhow::Result<()> {
     // faster than leaf_data but uses more memory
 
     let (block_notifier_tx, block_notifier_rx) = std::sync::mpsc::channel();
-    let snapshot_rate = cli_options.save_proofs_after.unwrap_or(50000);
+    let snapshot_rate= cli_options.save_proofs_after.unwrap_or(50000);
     info!("snapshot rate = {}", snapshot_rate);
     let mut prover = prover::Prover::new(
         client,
         index_store.clone(),
-        blocks.clone(),
         view.clone(),
         leaf_data,
         cli_options.initial_state_path.map(Into::into),
@@ -125,3 +116,4 @@ pub fn run_bridge() -> anyhow::Result<()> {
 
     prover.keep_up()
 }
+
