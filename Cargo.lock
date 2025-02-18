@@ -1431,6 +1431,7 @@ dependencies = [
  "simplelog",
  "starknet-crypto",
  "time",
+ "txoutset",
 ]
 
 [[package]]
@@ -6858,6 +6859,14 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "url",
+]
+
+[[package]]
+name = "txoutset"
+version = "0.3.0"
+dependencies = [
+ "bitcoin 0.32.5",
+ "log",
 ]
 
 [[package]]

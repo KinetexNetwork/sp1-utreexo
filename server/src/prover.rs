@@ -50,6 +50,9 @@ use crate::udata::LeafContext;
 use crate::udata::LeafData;
 use crate::udata::UtreexoBlock;
 
+use txoutset::Dump;
+use txoutset::TxOut as ParsedTxOut;
+
 #[cfg(not(feature = "shinigami"))]
 pub type AccumulatorHash = rustreexo::accumulator::node_hash::BitcoinNodeHash;
 
@@ -134,15 +137,12 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         save_proofs_for_blocks_older_than: u32,
         block_notification: Sender<BlockHash>,
     ) -> Prover<LeafStorage> {
-        if start_height.is_some() {
-            info!("Start height manually provided");
-        } else {
-            info!("No start height provided, trying to load from disk");
-        }
-        let height = start_height.unwrap_or_else(|| index_database.load_height() as u32);
-        info!("Loaded height {}", height);
-        info!("Loading accumulator data...");
-        let acc = Self::try_from_disk(start_acc);
+        
+        let (acc, chain_tip) = load_acc_from_utxo_dump("./utxo_dump.dat", &rpc);
+        let height = rpc.get_block_height(chain_tip).unwrap();
+
+
+
         Self {
             snapshot_acc_every,
             rpc,
@@ -532,6 +532,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
 
         (proof, compact_leaves)
     }
+
 }
 
 #[cfg(feature = "api")]
@@ -571,4 +572,52 @@ pub enum Responses {
     /// Multiple blocks and utreexo data for them.
     Blocks(Vec<Vec<u8>>),
     TransactionOut(Vec<TxOut>, Proof),
+}
+
+
+/// Loads the accumulator from a utxo dump. Returns loaded pollard and the block this Pollard corresponds to
+fn load_acc_from_utxo_dump(utxo_dump_path: &str, rpc: &Box<dyn Blockchain>) -> (Pollard, BlockHash) {
+    let dump = Dump::new(utxo_dump_path, txoutset::ComputeAddresses::No);
+
+    let bitcoin_tip = dump.block_hash;
+    
+    let mut leaf_data = vec![];
+
+    let len = dump.utxo_set_size;
+    let percent = len / 100;
+    let mut i = 0;
+    
+    for parsed_txout in dump {
+        i += 1;
+        if i % percent == 0 {
+            info!("Converting utxodump to leaf data: {}% done", i / percent);
+        }
+        let prevout = parsed_txout.out_point.clone();
+        let utxo = bitcoin::TxOut {
+            value: bitcoin::Amount::from_sat(u64::from(parsed_txout.amount)),
+            script_pubkey: parsed_txout.script_pubkey.clone(),
+        };
+        let header_code = if parsed_txout.is_coinbase {
+            (parsed_txout.height << 1 ) | 1
+        } else {
+            parsed_txout.height << 1
+        };
+        let block_hash = rpc.get_block_hash(parsed_txout.height as u64).unwrap();
+        leaf_data.push(crate::udata::bitcoin_leaf_data::BitcoinLeafData {
+            block_hash,
+            prevout,
+            header_code,
+            utxo,
+        });
+    }
+
+    info!("Converting utxodump to leaf data done, storing in pollard");
+    info!("Hashing leaf data");
+    let leaf_data_hashes = leaf_data.iter().map(|leaf| leaf.compute_hash()).collect::<Vec<_>>();
+
+    info!("Hashing leaf data done, creating pollard");
+    info!("Creating pollard, this may take a while");
+    let mut acc = Pollard::new();
+    acc.modify(&leaf_data_hashes, &[]).unwrap();
+    (acc, bitcoin_tip)
 }

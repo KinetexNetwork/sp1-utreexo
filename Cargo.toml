@@ -4,6 +4,7 @@ members = [
     "server",
     "circuit/script",
      "input-generator",
+     "txoutset",
 ]
 exclude = [
     "circuit/program/utreexo",

@@ -183,7 +183,7 @@ def get_available_txnums() -> list[int]:
 
 def cleanup() -> None:
     system("rm -rf input-generator/acc-data/*")
-    system("rm -rf circuit/acc-data/*")
+    # system("rm -rf circuit/acc-data/*")
     system("rm -rf circuit/metrics/*")
 
 

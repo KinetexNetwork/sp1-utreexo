@@ -5,7 +5,7 @@
 //! ```
 //! use std::str::FromStr;
 //!
-//!  use rustreexo::accumulator::node_hash::NodeHash;
+//! use rustreexo::accumulator::node_hash::NodeHash;
 //! let hash =
 //!     NodeHash::from_str("0000000000000000000000000000000000000000000000000000000000000000")
 //!         .unwrap();
@@ -53,7 +53,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
-
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, PartialOrd, Ord, Default)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]

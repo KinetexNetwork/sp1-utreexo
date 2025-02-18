@@ -1,0 +1,14 @@
+[package]
+name = "txoutset-csv"
+version = "0.2.1"
+edition = "2021"
+
+[dependencies]
+hex = "0.4.3"
+
+[dependencies.txoutset]
+path = "../../"
+
+[dependencies.clap]
+version = "4.5.1"
+features = ["derive"]

@@ -56,3 +56,13 @@ SP1_PROVER=network NETWORK_PRIVATE_KEY=<YOUR_PRIVATE_KEY> cargo r --release -- -
 `server` and `rustreexo` are based on the work of Davidson-Souza and mit-dci:
 https://github.com/mit-dci/rustreexo
 https://github.com/Davidson-Souza/rpc-utreexo-bridge
+
+
+{
+  "coins_written": 179030702,
+  "base_hash": "00000000000000000001db89f31efce008464b913bbfc98249e5a65b9e92c94e",
+  "base_height": 883426,
+  "path": "/home/bitcoin/.bitcoin/utxo_dump.dat",
+  "txoutset_hash": "cac0322edc4edc0a4e34c06fb7058b3bd69a239d25bc380b2ec49863cadd8be5",
+  "nchaintx": 1154152663
+}

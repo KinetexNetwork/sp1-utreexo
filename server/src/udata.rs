@@ -314,7 +314,7 @@ pub mod bitcoin_leaf_data {
             leaf_data.compute_hash()
         }
 
-        fn compute_hash(&self) -> BitcoinNodeHash {
+        pub fn compute_hash(&self) -> BitcoinNodeHash {
             let mut ser_utxo = vec![];
             let _ = self.utxo.consensus_encode(&mut ser_utxo);
             let leaf_hash = Sha512_256::new()
