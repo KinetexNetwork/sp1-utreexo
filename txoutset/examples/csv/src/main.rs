@@ -37,8 +37,8 @@ fn main() -> Result<(), std::io::Error> {
         ComputeAddresses::No
     };
 
-    match Dump::new(&args.file, compute_addresses) {
-        Ok(dump) => {
+    let dump = Dump::new(&args.file, compute_addresses);
+      
             if args.check {
                 return writeln!(
                     stdout,
@@ -81,8 +81,3 @@ fn main() -> Result<(), std::io::Error> {
 
             Ok(())
         }
-        Err(e) => {
-            writeln!(std::io::stderr(), "{}: {}", e, args.file)
-        }
-    }
-}

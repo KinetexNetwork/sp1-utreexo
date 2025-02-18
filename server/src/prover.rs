@@ -606,7 +606,7 @@ fn load_acc_from_utxo_dump(utxo_dump_path: &str, rpc: &Box<dyn Blockchain>) -> (
         leaf_data.push(crate::udata::bitcoin_leaf_data::BitcoinLeafData {
             block_hash,
             prevout,
-            header_code,
+            header_code: header_code as u32,
             utxo,
         });
     }

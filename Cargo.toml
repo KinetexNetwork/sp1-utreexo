@@ -5,7 +5,9 @@ members = [
     "circuit/script",
      "input-generator",
      "txoutset",
+     "txoutset/examples/csv",
 ]
 exclude = [
     "circuit/program/utreexo",
+    
 ]
