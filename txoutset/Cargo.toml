@@ -10,5 +10,5 @@ license = "MIT"
 edition = "2021"
 
 [dependencies]
-bitcoin = "0.32.4"
+bitcoin = "0.31.1"
 log = "0.4.21"

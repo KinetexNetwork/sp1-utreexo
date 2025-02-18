@@ -159,8 +159,10 @@ impl Decodable for Code {
         reader: &mut R,
     ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let var_int = VarInt::consensus_decode(reader)?;
-        let code = u32::try_from(u64::from(var_int))
-            .map_err(|_| bitcoin::consensus::encode::Error::ParseFailed("invalid cast to u32"))?;
+        let code = u32::try_from(u64::from(var_int)).map_err(|_| {
+            log::info!("VarInt to u32 cast failed: {:?}", var_int);
+            bitcoin::consensus::encode::Error::ParseFailed("invalid cast to u32")
+        })?;
 
         Ok(Code {
             height: code >> 1,
