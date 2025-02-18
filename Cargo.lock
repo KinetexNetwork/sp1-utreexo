@@ -6870,15 +6870,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "txoutset-csv"
-version = "0.2.1"
-dependencies = [
- "clap",
- "hex",
- "txoutset",
-]
-
-[[package]]
 name = "typenum"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

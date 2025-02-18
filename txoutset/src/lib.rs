@@ -31,7 +31,7 @@ pub struct TxOut {
     /// Value of the output, satoshis
     pub amount: Amount,
     /// Block height where the transaction was confirmed
-    pub height: u64,
+    pub height: u32,
     /// Whether the output is in the coinbase transaction of the block
     pub is_coinbase: bool,
     /// The specific transaction output
@@ -138,7 +138,7 @@ impl Iterator for Dump {
 
 #[derive(Debug)]
 struct Code {
-    height: u64,
+    height: u32,
     is_coinbase: bool,
 }
 
@@ -147,7 +147,7 @@ impl Encodable for Code {
         &self,
         writer: &mut W,
     ) -> Result<usize, bitcoin::io::Error> {
-        let code = self.height * 2 + u64::from(self.is_coinbase);
+        let code = self.height * 2 + u32::from(self.is_coinbase);
         let var_int = VarInt::from(code);
 
         var_int.consensus_encode(writer)
@@ -159,7 +159,8 @@ impl Decodable for Code {
         reader: &mut R,
     ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let var_int = VarInt::consensus_decode(reader)?;
-        let code = u64::from(var_int);
+        let code = u32::try_from(u64::from(var_int))
+            .map_err(|_| bitcoin::consensus::encode::Error::ParseFailed("invalid cast to u32"))?;
 
         Ok(Code {
             height: code >> 1,
