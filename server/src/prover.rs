@@ -141,7 +141,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
             snapshot_acc_every,
             rpc,
             acc,
-            height,
+            height: height - 5,
             storage: index_database,
             view,
             leaf_data,
