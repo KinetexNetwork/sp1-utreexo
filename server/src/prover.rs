@@ -579,27 +579,16 @@ struct CsvUtxo {
     address: String,
 }
 use crate::udata::bitcoin_leaf_data::BitcoinLeafData;
-use std::str::FromStr;
+
 use bitcoin::Amount;
 use bitcoin::ScriptBuf;
 impl CsvUtxo {
-    pub fn as_bitcoin_leaf_data(self, rpc: &Box<dyn Blockchain>) -> BitcoinLeafData {
-        let prevout = OutPoint {
-            txid: Txid::from_str(&self.txid).unwrap(),
-            vout: self.vout,
-        };
-        let header_code = if self.coinbase == 1 {
-            self.height << 1 | 1
-        } else {
-            self.height << 1
-        };
+    pub fn as_bitcoin_leaf_data(self) -> BitcoinLeafData {
         let utxo = TxOut {
             value: Amount::from_sat(self.amount),
             script_pubkey: ScriptBuf::from_hex(&self.script).unwrap(),
         };
         BitcoinLeafData {
-            prevout,
-            header_code,
             utxo,
         }
     }
@@ -624,7 +613,7 @@ fn load_acc_from_utxo_dump(
             max_height = utxo.height;
         }
 
-        let leaf_data = utxo.as_bitcoin_leaf_data(rpc);
+        let leaf_data = utxo.as_bitcoin_leaf_data();
         leaf_datas.push(leaf_data);
     }
     info!("Loading done, starting to hash utxos");

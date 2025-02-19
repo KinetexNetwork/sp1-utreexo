@@ -289,19 +289,6 @@ pub mod bitcoin_leaf_data {
     /// data and some commitments to make it harder to attack an utreexo-only node.
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub struct BitcoinLeafData {
-        /// The utxo's outpoint
-        pub prevout: OutPoint,
-        /// Header code is a compact commitment to the block height and whether or not this
-        /// transaction is coinbase. It's defined as
-        ///
-        /// ```
-        /// header_code: u32 = if transaction.is_coinbase() {
-        ///     (block_height << 1 ) | 1
-        /// } else {
-        ///     block_height << 1
-        /// };
-        /// ```
-        pub header_code: u32,
         /// The actual utxo
         pub utxo: TxOut,
     }
@@ -316,11 +303,6 @@ pub mod bitcoin_leaf_data {
             let mut ser_utxo = vec![];
             let _ = self.utxo.consensus_encode(&mut ser_utxo);
             let leaf_hash = Sha512_256::new()
-                .chain_update(UTREEXO_TAG_V1)
-                .chain_update(UTREEXO_TAG_V1)
-                .chain_update(self.prevout.txid)
-                .chain_update(self.prevout.vout.to_le_bytes())
-                .chain_update(self.header_code.to_le_bytes())
                 .chain_update(ser_utxo)
                 .finalize();
             BitcoinNodeHash::from(leaf_hash.as_slice())
@@ -337,13 +319,8 @@ pub mod bitcoin_leaf_data {
         fn consensus_decode_from_finite_reader<R: bitcoin::io::Read + ?Sized>(
             reader: &mut R,
         ) -> Result<Self, bitcoin::consensus::encode::Error> {
-            let block_hash = BlockHash::consensus_decode(reader)?;
-            let prevout = OutPoint::consensus_decode(reader)?;
-            let header_code = u32::consensus_decode(reader)?;
             let utxo = TxOut::consensus_decode(reader)?;
             Ok(BitcoinLeafData {
-                prevout,
-                header_code,
                 utxo,
             })
         }
@@ -355,8 +332,6 @@ pub mod bitcoin_leaf_data {
             writer: &mut W,
         ) -> Result<usize, bitcoin::io::Error> {
             let mut len = 0;
-            len += self.prevout.consensus_encode(writer)?;
-            len += self.header_code.consensus_encode(writer)?;
             len += self.utxo.consensus_encode(writer)?;
             Ok(len)
         }
@@ -365,11 +340,6 @@ pub mod bitcoin_leaf_data {
     impl From<LeafContext> for BitcoinLeafData {
         fn from(value: LeafContext) -> Self {
             BitcoinLeafData {
-                prevout: OutPoint {
-                    txid: value.txid,
-                    vout: value.vout,
-                },
-                header_code: value.block_height << 1 | value.is_coinbase as u32,
                 utxo: TxOut {
                     value: Amount::from_sat(value.value),
                     script_pubkey: value.pk_script,
