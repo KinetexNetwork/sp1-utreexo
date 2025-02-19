@@ -289,8 +289,6 @@ pub mod bitcoin_leaf_data {
     /// data and some commitments to make it harder to attack an utreexo-only node.
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub struct BitcoinLeafData {
-        /// A commitment to the block creating this utxo
-        pub block_hash: BlockHash,
         /// The utxo's outpoint
         pub prevout: OutPoint,
         /// Header code is a compact commitment to the block height and whether or not this
@@ -320,7 +318,6 @@ pub mod bitcoin_leaf_data {
             let leaf_hash = Sha512_256::new()
                 .chain_update(UTREEXO_TAG_V1)
                 .chain_update(UTREEXO_TAG_V1)
-                .chain_update(self.block_hash)
                 .chain_update(self.prevout.txid)
                 .chain_update(self.prevout.vout.to_le_bytes())
                 .chain_update(self.header_code.to_le_bytes())
@@ -345,7 +342,6 @@ pub mod bitcoin_leaf_data {
             let header_code = u32::consensus_decode(reader)?;
             let utxo = TxOut::consensus_decode(reader)?;
             Ok(BitcoinLeafData {
-                block_hash,
                 prevout,
                 header_code,
                 utxo,
@@ -359,7 +355,6 @@ pub mod bitcoin_leaf_data {
             writer: &mut W,
         ) -> Result<usize, bitcoin::io::Error> {
             let mut len = 0;
-            len += self.block_hash.consensus_encode(writer)?;
             len += self.prevout.consensus_encode(writer)?;
             len += self.header_code.consensus_encode(writer)?;
             len += self.utxo.consensus_encode(writer)?;
@@ -370,7 +365,6 @@ pub mod bitcoin_leaf_data {
     impl From<LeafContext> for BitcoinLeafData {
         fn from(value: LeafContext) -> Self {
             BitcoinLeafData {
-                block_hash: value.block_hash,
                 prevout: OutPoint {
                     txid: value.txid,
                     vout: value.vout,

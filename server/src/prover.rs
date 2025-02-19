@@ -596,9 +596,7 @@ impl CsvUtxo {
             value: Amount::from_sat(self.amount),
             script_pubkey: ScriptBuf::from_hex(&self.script).unwrap(),
         };
-        let block_hash = rpc.get_block_hash(self.height as u64).unwrap();
         BitcoinLeafData {
-            block_hash,
             prevout,
             header_code,
             utxo,
