@@ -47,7 +47,7 @@ clap = { version = "4.5.20", features = ["derive"] }
 time = "0.3.36"
 ahash = "0.8.11"
 ctrlc = "3.4.5"
-txoutset = { path = "../txoutset"}
+csv = "1.1.6"
 
 [features]
 default = ["bitcoin", "node", "api"]

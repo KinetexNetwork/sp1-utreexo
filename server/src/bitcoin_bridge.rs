@@ -88,7 +88,7 @@ pub fn run_bridge() -> anyhow::Result<()> {
     // faster than leaf_data but uses more memory
 
     let (block_notifier_tx, block_notifier_rx) = std::sync::mpsc::channel();
-    let snapshot_rate = cli_options.save_proofs_after.unwrap_or(50000);
+    let snapshot_rate= cli_options.save_proofs_after.unwrap_or(50000);
     info!("snapshot rate = {}", snapshot_rate);
     let mut prover = prover::Prover::new(
         client,
@@ -116,3 +116,5 @@ pub fn run_bridge() -> anyhow::Result<()> {
 
     prover.keep_up()
 }
+
+

@@ -40,8 +40,6 @@ use rustreexo::accumulator::proof::Proof;
 use rustreexo::accumulator::stump::Stump;
 use serde::Deserialize;
 use serde::Serialize;
-use txoutset::Dump;
-use txoutset::TxOut as ParsedTxOut;
 
 use crate::block_index::BlockIndex;
 use crate::block_index::BlocksIndex;
@@ -135,8 +133,8 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         save_proofs_for_blocks_older_than: u32,
         block_notification: Sender<BlockHash>,
     ) -> Prover<LeafStorage> {
-        let (acc, chain_tip) = load_acc_from_utxo_dump("./utxo_dump.dat", &rpc);
-        let height = rpc.get_block_height(chain_tip).unwrap();
+        // TODO: make this dump path configurable
+        let (acc, height) = load_acc_from_utxo_dump("./utxodump.csv", &rpc);
 
         Self {
             snapshot_acc_every,
@@ -566,56 +564,75 @@ pub enum Responses {
     TransactionOut(Vec<TxOut>, Proof),
 }
 
-/// Loads the accumulator from a utxo dump. Returns loaded pollard and the block this Pollard corresponds to
-fn load_acc_from_utxo_dump(
-    utxo_dump_path: &str,
-    rpc: &Box<dyn Blockchain>,
-) -> (Pollard, BlockHash) {
-    let dump = Dump::new(utxo_dump_path, txoutset::ComputeAddresses::No);
-
-    let bitcoin_tip = dump.block_hash;
-
-    let mut leaf_data = vec![];
-
-    let len = dump.utxo_set_size;
-    let percent = len / 100;
-    let mut i = 0;
-
-    for parsed_txout in dump {
-        i += 1;
-        if i % percent == 0 {
-            info!("Converting utxodump to leaf data: {}% done", i / percent);
-        }
-        let prevout = parsed_txout.out_point.clone();
-        let utxo = bitcoin::TxOut {
-            value: bitcoin::Amount::from_sat(u64::from(parsed_txout.amount)),
-            script_pubkey: parsed_txout.script_pubkey.clone(),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CsvUtxo {
+    count: u64,
+    txid: String,
+    vout: u32,
+    pub height: u32,
+    coinbase: u8,
+    amount: u64,
+    script: String,
+    #[serde(rename = "type")]
+    tx_type: String,
+    address: String,
+}
+use crate::udata::bitcoin_leaf_data::BitcoinLeafData;
+use std::str::FromStr;
+use bitcoin::Amount;
+use bitcoin::ScriptBuf;
+impl CsvUtxo {
+    pub fn as_bitcoin_leaf_data(self, rpc: &Box<dyn Blockchain>) -> BitcoinLeafData {
+        let prevout = OutPoint {
+            txid: Txid::from_str(&self.txid).unwrap(),
+            vout: self.vout,
         };
-        let header_code = if parsed_txout.is_coinbase {
-            (parsed_txout.height << 1) | 1
+        let header_code = if self.coinbase == 1 {
+            self.height << 1 | 1
         } else {
-            parsed_txout.height << 1
+            self.height << 1
         };
-        use bitcoin::hashes::Hash;
-        let block_hash = BlockHash::from_slice(&[0; 32]).unwrap();
-        leaf_data.push(crate::udata::bitcoin_leaf_data::BitcoinLeafData {
+        let utxo = TxOut {
+            value: Amount::from_sat(self.amount),
+            script_pubkey: ScriptBuf::from_hex(&self.script).unwrap(),
+        };
+        let block_hash = rpc.get_block_hash(self.height as u64).unwrap();
+        BitcoinLeafData {
             block_hash,
             prevout,
             header_code,
             utxo,
-        });
+        }
     }
+}
 
-    info!("Converting utxodump to leaf data done, storing in pollard");
-    info!("Hashing leaf data");
-    let leaf_data_hashes = leaf_data
+/// Loads the accumulator from a utxo dump. Returns loaded pollard and the block this Pollard corresponds to
+fn load_acc_from_utxo_dump(
+    utxo_dump_path: &str,
+    rpc: &Box<dyn Blockchain>,
+)  -> (Pollard, u32) {
+    let file = File::open(utxo_dump_path).unwrap();
+    let mut rdr = csv::Reader::from_reader(file);
+    let mut leaf_datas = Vec::new();
+    let mut max_height = 0;
+    for (idx, result) in rdr.deserialize().enumerate() {
+        if idx % 10000 == 0 {
+            info!("Loaded utxos: {}", idx);
+        }
+        let utxo: CsvUtxo = result.unwrap();
+        
+        if utxo.height > max_height {
+            max_height = utxo.height;
+        }
+
+        let leaf_data = utxo.as_bitcoin_leaf_data(rpc);
+        leaf_datas.push(leaf_data);
+    }
+    let leaf_hashes = leaf_datas
         .iter()
-        .map(|leaf| leaf.compute_hash())
+        .map(|leaf_data|leaf_data.compute_hash())
         .collect::<Vec<_>>();
-
-    info!("Hashing leaf data done, creating pollard");
-    info!("Creating pollard, this may take a while");
     let mut acc = Pollard::new();
-    acc.modify(&leaf_data_hashes, &[]).unwrap();
-    (acc, bitcoin_tip)
+    acc.modify(&leaf_hashes, &[]).unwrap();
+    (acc, max_height)
 }
