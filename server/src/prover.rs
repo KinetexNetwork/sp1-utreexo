@@ -136,6 +136,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         // TODO: make this dump path configurable
         let (acc, height) = load_acc_from_utxo_dump("./utxodump.csv", &rpc);
 
+        info!("Loaded acc from utxo dump, height={}", height);
         Self {
             snapshot_acc_every,
             rpc,
@@ -626,11 +627,25 @@ fn load_acc_from_utxo_dump(
         let leaf_data = utxo.as_bitcoin_leaf_data(rpc);
         leaf_datas.push(leaf_data);
     }
+    info!("Loading done, starting to hash utxos");
     let leaf_hashes = leaf_datas
         .iter()
-        .map(|leaf_data|leaf_data.compute_hash())
+        .enumerate()
+        .map(|(idx, leaf_data)| {
+            if idx % 10000 == 0 {
+                info!("Hashed utxos: {}", idx);
+            }
+            leaf_data.compute_hash()
+        })
+        .collect::<Vec<_>>();
+    info!("Hashing done, starting to build pollard");
+    let chunks = leaf_hashes
+        .chunks(10000)
         .collect::<Vec<_>>();
     let mut acc = Pollard::new();
-    acc.modify(&leaf_hashes, &[]).unwrap();
+    for (idx, chunk) in chunks.iter().enumerate() {
+        info!("Added {} utxos to pollard", idx * 10000);
+        acc.modify(chunk, &[]).unwrap();
+    }
     (acc, max_height)
 }
