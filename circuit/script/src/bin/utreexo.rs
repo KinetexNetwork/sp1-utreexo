@@ -63,6 +63,7 @@ pub enum ScriptPubkeyType {
     WitnessV0ScriptHash,
 }
 
+// FIXME: This is fragile, it should be rather optional
 const ELF: &[u8] = include_bytes!(
     "../../../program/utreexo/target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
 );
@@ -113,11 +114,7 @@ fn get_input_leaf_hashes(file_path: &str) -> HashMap<TxIn, BitcoinNodeHash> {
     let reader = BufReader::new(file);
     let deserialized_struct: Vec<(TxIn, BitcoinNodeHash)> =
         serde_json::from_reader(reader).unwrap();
-    let mut res: HashMap<TxIn, BitcoinNodeHash> = Default::default();
-    for (k, v) in deserialized_struct {
-        res.insert(k, v);
-    }
-    res
+    deserialized_struct.into_iter().collect()
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -146,17 +143,18 @@ fn get_block_heights(data_path: &str) -> Result<Vec<u64>, Box<dyn Error>> {
         let entry = entry?;
         let path = entry.path();
 
-        if path.is_dir() {
-            if let Some(folder_name) = path.file_name().and_then(|n| n.to_str()) {
-                if let Some(caps) = re.captures(folder_name) {
-                    if let Some(num_match) = caps.get(1) {
-                        if let Ok(height) = num_match.as_str().parse::<u64>() {
-                            heights.push(height);
-                        } else {
-                            eprintln!("Warning: Couldn't parse height from '{}'", folder_name);
-                        }
-                    }
-                }
+        if let Some((folder_name, num_match)) = (if path.is_dir() {
+            path.file_name().and_then(|n| n.to_str())
+        } else {
+            None
+        })
+        .and_then(|s| {
+            re.captures(s)
+                .and_then(|caps| caps.get(1).map(|num_match| (s, num_match)))
+        }) {
+            match num_match.as_str().parse::<u64>() {
+                Ok(height) => heights.push(height),
+                Err(_) => eprintln!("Warning: Couldn't parse height from '{}'", folder_name),
             }
         }
     }
@@ -175,30 +173,34 @@ fn read_height_from_file(file_path: &str) -> u32 {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let cargo_root = env!("CARGO_MANIFEST_DIR");
     utils::setup_logger();
     let args = Args::parse();
     if args.execute == args.prove {
         eprintln!("Error: You must specify either --execute or --prove");
         std::process::exit(1);
     }
-    let mut available_tx_counts = get_block_heights("../acc-data/").unwrap();
+    let mut available_tx_counts =
+        get_block_heights(&format!("{cargo_root}/../acc-data/").to_string()).unwrap();
     available_tx_counts.sort();
     if args.exact.is_some() {
         available_tx_counts = vec![args.exact.unwrap()];
     }
     for tx_count in available_tx_counts {
-        let block_path: String = format!("../acc-data/block-{tx_count}txs/block.txt");
+        let block_path: String = format!("{cargo_root}/../acc-data/block-{tx_count}txs/block.txt");
         let block: Block =
             bitcoin::consensus::deserialize(&fs::read(&block_path).unwrap()).unwrap();
 
-        let height_path = format!("../acc-data/block-{tx_count}txs/block-height.txt");
+        let height_path = format!("{cargo_root}/../acc-data/block-{tx_count}txs/block-height.txt");
         let height: u32 = read_height_from_file(&height_path);
 
         println!("Calculated height: {height}");
-        let acc_before_path: String = format!("../acc-data/block-{tx_count}txs/acc-before.txt");
-        let acc_after_path: String = format!("../acc-data/block-{tx_count}txs/acc-after.txt");
+        let acc_before_path: String =
+            format!("{cargo_root}/../acc-data/block-{tx_count}txs/acc-before.txt");
+        let acc_after_path: String =
+            format!("{cargo_root}/../acc-data/block-{tx_count}txs/acc-after.txt");
         let input_leaf_hashes_path: String =
-            format!("../acc-data/block-{tx_count}txs/input_leaf_hashes.txt");
+            format!("{cargo_root}/../acc-data/block-{tx_count}txs/input_leaf_hashes.txt");
 
         let serialized_acc_before = fs::read(&acc_before_path).unwrap();
 
@@ -252,9 +254,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 tx_count,
             };
 
-            let file = File::create(format!("../metrics/{}.json", tx_count))?;
+            let file = File::create(format!("{cargo_root}/../metrics/{tx_count}.json"))?;
             serde_json::to_writer_pretty(file, &metrics)?;
-            println!("Report saved to ../metrics/{}.json", tx_count);
+            println!("Report saved to {cargo_root}/../metrics/{tx_count}.json");
         } else {
             let client = ProverClient::from_env();
             let (pk, vk) = client.setup(ELF);
@@ -285,7 +287,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 tx_count,
             };
 
-            let file = File::create(format!("../metrics/{}.json", tx_count))?;
+            let file = File::create(format!("{cargo_root}/../metrics/{tx_count}.json"))?;
             serde_json::to_writer_pretty(file, &metrics)?;
 
             println!("Successfully generated proof!");

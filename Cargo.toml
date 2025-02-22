@@ -1,10 +1,14 @@
 [workspace]
+resolver = "2"
+
 members = [
+    "rustreexo",
     "rustreexo",
     "server",
     "circuit/script",
     "input-generator",
-]
-exclude = [
     "circuit/program/utreexo",
 ]
+
+[profile.release]
+debug = true

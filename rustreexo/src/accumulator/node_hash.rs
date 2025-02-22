@@ -83,30 +83,23 @@ impl Deref for BitcoinNodeHash {
         }
     }
 }
+
 impl Display for BitcoinNodeHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        if let BitcoinNodeHash::Some(ref inner) = self {
-            let mut s = String::new();
-            for byte in inner.iter() {
-                s.push_str(&format!("{:02x}", byte));
+        match self {
+            BitcoinNodeHash::Some(inner) => {
+                for byte in inner {
+                    write!(f, "{:02x}", byte)?;
+                }
+                Ok(())
             }
-            write!(f, "{}", s)
-        } else {
-            write!(f, "empty")
+            _ => write!(f, "empty"),
         }
     }
 }
 impl Debug for BitcoinNodeHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        if let BitcoinNodeHash::Some(ref inner) = self {
-            let mut s = String::new();
-            for byte in inner.iter() {
-                s.push_str(&format!("{:02x}", byte));
-            }
-            write!(f, "{}", s)
-        } else {
-            write!(f, "empty")
-        }
+        write!(f, "{}", self)
     }
 }
 
@@ -134,10 +127,7 @@ impl BitcoinNodeHash {
     /// Tells whether this hash is empty. We use empty hashes throughout the code to represent
     /// leaves we want to delete.
     pub fn is_empty(&self) -> bool {
-        if let BitcoinNodeHash::Empty = self {
-            return true;
-        }
-        false
+        matches!(self, BitcoinNodeHash::Empty)
     }
     /// Creates a new BitcoinNodeHash from a 32 byte array.
     /// # Example
@@ -217,23 +207,20 @@ impl BitcoinNodeHash {
     where
         R: std::io::Read,
     {
-        let mut tag = [0];
+        let mut tag = [0u8; 1];
         reader.read_exact(&mut tag)?;
-        match tag {
-            [0] => Ok(Self::Empty),
-            [1] => Ok(Self::Placeholder),
-            [2] => {
-                let mut hash = [0; 32];
+        match tag[0] {
+            0 => Ok(Self::Empty),
+            1 => Ok(Self::Placeholder),
+            2 => {
+                let mut hash = [0u8; 32];
                 reader.read_exact(&mut hash)?;
                 Ok(Self::Some(hash))
             }
-            [_] => {
-                let err = std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "unexpected tag for BitcoinNodeHash",
-                );
-                Err(err)
-            }
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "unexpected tag for BitcoinNodeHash",
+            )),
         }
     }
 }
