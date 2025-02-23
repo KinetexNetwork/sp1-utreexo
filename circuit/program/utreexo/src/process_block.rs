@@ -1,22 +1,29 @@
-use bitcoin::{Block, OutPoint, TxIn, Txid};
+use bitcoin::consensus::Encodable;
+use bitcoin::{Block, OutPoint, Transaction, TxIn, Txid};
+use bitcoin_hashes::Hash;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use std::collections::HashMap;
-use bitcoin::consensus::Encodable;
-use bitcoin_hashes::Hash;
 
 use sha2::{Digest, Sha256};
 
 use crate::btc_structs::{BatchProof, LeafData};
 
-
-fn compute_txid(tx: &bitcoin::Transaction) -> bitcoin::Txid {
+fn compute_txid(tx: &Transaction) -> Txid {
     let mut tx_bytes = Vec::new();
-    
-    tx.version.consensus_encode(&mut tx_bytes).expect("engines don't error");
-    tx.input.consensus_encode(&mut tx_bytes).expect("engines don't error");
-    tx.output.consensus_encode(&mut tx_bytes).expect("engines don't error");
-    tx.lock_time.consensus_encode(&mut tx_bytes).expect("engines don't error");
+
+    tx.version
+        .consensus_encode(&mut tx_bytes)
+        .expect("engines don't error");
+    tx.input
+        .consensus_encode(&mut tx_bytes)
+        .expect("engines don't error");
+    tx.output
+        .consensus_encode(&mut tx_bytes)
+        .expect("engines don't error");
+    tx.lock_time
+        .consensus_encode(&mut tx_bytes)
+        .expect("engines don't error");
 
     let hash = Sha256::digest(&tx_bytes);
     let hash = Sha256::digest(&hash);
