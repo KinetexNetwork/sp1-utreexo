@@ -229,8 +229,29 @@ impl BitcoinNodeHash {
 mod test {
     use std::str::FromStr;
 
+    use crate::accumulator::util::tests::hash_from_u8;
+
     use super::BitcoinNodeHash;
-    use crate::accumulator::util::hash_from_u8;
+
+    impl FromStr for BitcoinNodeHash {
+        type Err = String; // Or another error type you prefer
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            if s == "empty" {
+                return Ok(BitcoinNodeHash::Empty);
+            }
+            if s.len() != 64 {
+                return Err(format!("Invalid string length: {}", s.len()));
+            }
+            let mut inner = [0; 32];
+            for i in 0..32 {
+                let byte_str = &s[i * 2..i * 2 + 2];
+                inner[i] =
+                    u8::from_str_radix(byte_str, 16).map_err(|e| format!("Invalid hex: {e:?}"))?;
+            }
+            Ok(BitcoinNodeHash::Some(inner))
+        }
+    }
 
     #[test]
     fn test_parent_hash() {
