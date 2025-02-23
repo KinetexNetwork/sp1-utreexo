@@ -37,26 +37,39 @@ pub fn process_block(
     acc: &mut Pollard,
     input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash>,
 ) -> BatchProof {
-    let mut inputs = Vec::new();
-    let mut utxos = Vec::new();
+    // Pre-calculate capacity estimates
+    let estimated_inputs: usize = block
+        .txdata
+        .iter()
+        .filter(|tx| !tx.is_coinbase())
+        .map(|tx| tx.input.len())
+        .sum();
+    let estimated_utxos: usize = block.txdata.iter().map(|tx| tx.output.len()).sum();
+    let mut inputs = Vec::with_capacity(estimated_inputs);
+    let mut utxos = Vec::with_capacity(estimated_utxos);
+
+    // Block is static, thus its hash should be computed outside of the loop.
+    let block_hash = block.block_hash();
+
     for tx in block.txdata.iter() {
         let txid = compute_txid(tx);
+
         for input in tx.input.iter() {
             if !tx.is_coinbase() {
                 let hash = *input_leaf_hashes.get(input).unwrap();
                 if let Some(idx) = utxos.iter().position(|h| *h == hash) {
-                    utxos.remove(idx);
+                    utxos.swap_remove(idx);
                 } else {
                     inputs.push(hash);
                 }
             }
         }
-        let block_hash = block.block_hash();
+
         for (idx, output) in tx.output.iter().enumerate() {
             // TODO: doublecheck if is_op_return is proper method
             if !output.script_pubkey.is_op_return() {
                 let header_code = if tx.is_coinbase() {
-                    height << 1 | 1
+                    (height << 1) | 1
                 } else {
                     height << 1
                 };
@@ -73,7 +86,9 @@ pub fn process_block(
             }
         }
     }
+
     acc.modify(&utxos, &inputs).unwrap();
+
     BatchProof {
         targets: vec![],
         hashes: vec![],
