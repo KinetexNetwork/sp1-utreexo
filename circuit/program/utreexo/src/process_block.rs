@@ -26,7 +26,7 @@ fn compute_txid(tx: &Transaction) -> Txid {
         .expect("engines don't error");
 
     let hash = Sha256::digest(&tx_bytes);
-    let hash = Sha256::digest(&hash);
+    let hash = Sha256::digest(hash);
     let hash_bytes = hash.as_slice();
     Txid::from_slice(hash_bytes).unwrap()
 }
