@@ -55,6 +55,7 @@ use crate::udata::LeafContext;
 use crate::udata::LeafData;
 use crate::udata::UtreexoBlock;
 use crate::zk;
+use crate::zk::ProofStorage;
 
 const ELF: &[u8] = include_bytes!(
     "../../circuit/program/utreexo/target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
@@ -149,6 +150,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         shutdown_flag: Arc<Mutex<bool>>,
         save_proofs_for_blocks_older_than: u32,
         block_notification: Sender<BlockHash>,
+        sp1_proofs_path: String,
     ) -> Prover<LeafStorage> {
         if start_height.is_some() {
             info!("Start height manually provided");
@@ -176,7 +178,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
             prover_client: prover,
             proving_key,
             verification_key,
-            zk_proof_storage: Default::default(),
+            zk_proof_storage: ProofStorage::new(sp1_proofs_path),
         }
     }
 
@@ -353,13 +355,11 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
                 break;
             }
 
-            info!("Checking for requests");
             if let Ok(Some((req, res))) = receiver.try_next() {
                 let ret = self.handle_request(req).map_err(|e| e.to_string());
                 res.send(ret)
                     .map_err(|_| anyhow::anyhow!("Error sending response"))?;
             }
-            info!("Requests processed");
 
             if last_tip_update.elapsed().as_secs() > 10 {
                 if let Err(e) = self.check_tip(&mut last_tip_update) {
@@ -377,7 +377,6 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
     }
 
     fn check_tip(&mut self, last_tip_update: &mut std::time::Instant) -> anyhow::Result<()> {
-        info!("check tip");
         let height = self.rpc.get_block_count()? as u32;
         if height > self.height {
             self.prove_range(self.height + 1, self.height + 2)?;
@@ -492,7 +491,6 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
 
     /// Processes a block and returns the batch proof and the compact leaf data for the block.
     fn process_block(&mut self, block: &Block, height: u32, mtp: u32) -> (Proof, Vec<LeafContext>) {
-        info!("process block");
         let mut inputs = Vec::new();
         let mut utxos = Vec::new();
         let mut compact_leaves = Vec::new();
@@ -576,7 +574,6 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         (proof, compact_leaves)
     }
 }
-
 
 /// All requests we can send to the prover. The prover will respond with the corresponding
 /// response element.

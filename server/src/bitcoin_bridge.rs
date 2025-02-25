@@ -101,6 +101,7 @@ pub fn run_bridge() -> anyhow::Result<()> {
         kill_signal.clone(),
         snapshot_rate,
         block_notifier_tx,
+        subdir("sp1_proofs"),
     );
 
     let (sender, receiver) = channel(1024);

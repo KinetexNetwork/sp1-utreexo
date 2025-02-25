@@ -60,8 +60,10 @@ async fn perform_request(
         .await
         .send((request, sender))
         .await
-        .unwrap();
-    receiver.await.unwrap()
+        .map_err(|err| format!("Error performing request: {err}"))?;
+    receiver
+        .await
+        .map_err(|err| format!("Error performing request: {err}"))?
 }
 
 /// the handler for the /transaction/{hash}/unpent endpoint. It returns the unspent outputs of a transaction given its hash, as well as the proof for those outpouts.
