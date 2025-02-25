@@ -82,8 +82,8 @@ fn init_logger(log_file: Option<&str>, log_level: log::LevelFilter, log_to_term:
     let mut loggers: Vec<Box<dyn SharedLogger>> = vec![];
 
     let config = ConfigBuilder::new()
-        .add_filter_ignore(format!("sp1-sdk"))
-        .add_filter_ignore(format!("sp1_sdk"))
+        // .add_filter_ignore(format!("sp1-sdk"))
+        // .add_filter_ignore(format!("sp1_sdk"))
         .build();
     if let Some(file) = log_file {
         let file_logger = simplelog::WriteLogger::new(

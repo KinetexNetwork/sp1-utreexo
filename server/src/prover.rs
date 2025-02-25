@@ -554,7 +554,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
             let flagged_pollard = self.acc.clone().fake_modify(&utxos, &inputs);
             let stripped_pollard = flagged_pollard.get_stripped_pollard();
             info!("generating proof. height: {height}");
-            set_max_level(log::LevelFilter::Off);
+            // set_max_level(log::LevelFilter::Off);
             let sp1_proof = zk::run_circuit(
                 block,
                 stripped_pollard,
@@ -563,7 +563,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
                 &self.prover_client,
                 &self.proving_key,
             );
-            set_max_level(log::LevelFilter::Info);
+            // set_max_level(log::LevelFilter::Info);
             info!("generated proof. height: {height}");
             self.acc.modify(&utxos, &inputs).unwrap();
             self.zk_proof_storage.add_proof(height, sp1_proof);
