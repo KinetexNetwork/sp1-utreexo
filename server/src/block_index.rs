@@ -74,29 +74,7 @@ impl BlocksIndex {
         bucket.flush().unwrap();
     }
 
-    /// Returns the height of the latest block we have in the index.
-    pub fn load_height<'a>(&'a self) -> usize {
-        let bucket = self
-            .database
-            .bucket::<&'a [u8], Vec<u8>>(Some("meta"))
-            .unwrap();
-        let key = b"height";
-        let height = bucket.get(&key.as_slice());
-        match height {
-            Ok(Some(height)) => usize::from_be_bytes(height[..].try_into().unwrap()),
-            _ => 0,
-        }
-    }
 
-    /// Appends a new block entry to the index.
-    pub fn append<'a>(&'a self, index: BlockIndex, block: BlockHash) {
-        let bucket = self
-            .database
-            .bucket::<&'a [u8], IndexEntry>(Some("index"))
-            .unwrap();
-        let key: [u8; 32] = *block.as_byte_array();
-        bucket
-            .set(&key.as_slice(), &IndexEntry::Index(index))
-            .expect("Failed to write index");
-    }
+
+
 }

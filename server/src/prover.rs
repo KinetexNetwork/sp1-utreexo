@@ -6,21 +6,13 @@
 //! uses a channel to receive requests and sends responses through a oneshot channel, provided
 //! by the request sender. Maybe there is a better way to do this, but this is a TODO for later.
 use std::collections::HashMap;
-use std::fs;
 use std::fs::File;
-use std::io::BufReader;
-use std::io::BufWriter;
-use std::io::Write;
-use std::io::{self};
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::RwLock;
 
 use bitcoin::consensus::serialize;
-use bitcoin::consensus::Encodable;
 use bitcoin::Block;
 use bitcoin::BlockHash;
 use bitcoin::OutPoint;
@@ -28,10 +20,6 @@ use bitcoin::Script;
 use bitcoin::Transaction;
 use bitcoin::TxIn;
 use bitcoin::TxOut;
-#[cfg(feature = "api")]
-use bitcoin::Txid;
-#[cfg(feature = "api")]
-use futures::channel::mpsc::Receiver;
 use log::error;
 use log::info;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
@@ -41,31 +29,14 @@ use rustreexo::accumulator::stump::Stump;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::block_index::BlockIndex;
 use crate::block_index::BlocksIndex;
 use crate::chaininterface::Blockchain;
 use crate::chainview;
 use crate::udata::LeafContext;
 use crate::udata::LeafData;
-use crate::udata::UtreexoBlock;
 
-#[cfg(not(feature = "shinigami"))]
 pub type AccumulatorHash = rustreexo::accumulator::node_hash::BitcoinNodeHash;
 
-pub trait BlockStorage {
-    fn save_block(
-        &mut self,
-        block: &Block,
-        block_height: u32,
-        proof: Proof,
-        leaves: Vec<LeafContext>,
-        acc: &Pollard,
-    ) -> BlockIndex;
-    fn get_block(&self, index: BlockIndex) -> Option<UtreexoBlock>;
-}
-
-#[cfg(feature = "shinigami")]
-pub type AccumulatorHash = crate::udata::shinigami_udata::PoseidonHash;
 
 pub trait LeafCache: Sync + Send + Sized + 'static {
     fn remove(&mut self, outpoint: &OutPoint) -> Option<LeafContext>;
@@ -113,7 +84,7 @@ pub struct Prover<LeafStorage: LeafCache> {
     /// A flag that is set when the prover should shut down.
     shutdown_flag: Arc<Mutex<bool>>,
     /// Only save proofs for blocks older than that
-    save_proofs_for_blocks_older_than: u32,
+    _save_proofs_for_blocks_older_than: u32,
     block_notification: Sender<BlockHash>,
     ibd: bool,
 }
@@ -126,15 +97,15 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         index_database: Arc<BlocksIndex>,
         view: Arc<chainview::ChainView>,
         leaf_data: LeafStorage,
-        start_acc: Option<PathBuf>,
-        start_height: Option<u32>,
+        _start_acc: Option<PathBuf>,
+        _start_height: Option<u32>,
         snapshot_acc_every: Option<u32>,
         shutdown_flag: Arc<Mutex<bool>>,
         save_proofs_for_blocks_older_than: u32,
         block_notification: Sender<BlockHash>,
     ) -> Prover<LeafStorage> {
         // TODO: make this dump path configurable
-        let (acc, height) = load_acc_from_utxo_dump("./utxodump.csv", &rpc);
+        let (acc, height) = load_acc_from_utxo_dump("./utxodump.csv");
 
         info!("Loaded acc from utxo dump, height={}", height);
         Self {
@@ -146,13 +117,14 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
             view,
             leaf_data,
             shutdown_flag,
-            save_proofs_for_blocks_older_than,
+            _save_proofs_for_blocks_older_than: save_proofs_for_blocks_older_than,
             block_notification,
             ibd: true,
         }
     }
 
     /// Tries to load the accumulator from disk. If it fails, it creates a new one.
+    #[allow(dead_code)]
     fn try_from_disk(path: Option<PathBuf>) -> Pollard {
         if let Some(path) = path {
             let file = std::fs::File::open(&path).unwrap();
@@ -171,117 +143,6 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         match Pollard::deserialize(reader) {
             Ok(acc) => acc,
             Err(_) => Pollard::new(),
-        }
-    }
-
-    /// Handles the request from another module. It returns a response through the oneshot channel
-    /// provided by the request sender. Errors are returned as strings, maybe this should be changed
-    /// to a boxed error or something else.
-    #[cfg(feature = "api")]
-    fn handle_request(&mut self, req: Requests) -> anyhow::Result<Responses> {
-        use bitcoin::ScriptBuf;
-        use bitcoin::Sequence;
-        use bitcoin::Witness;
-
-        match req {
-            // Requests::GetSP1Proof(block_hash) => {
-            //     let proof = self
-            //         .zk_proof_storage
-            //         .get_proof(&block_hash)
-            //         .ok_or(anyhow::anyhow!("Proof not found"))?;
-            //     info!("Prover returned proof: {:#?}", proof);
-            //     Ok(Responses::SP1Proof(proof))
-            // }
-            Requests::GetProof(node) => {
-                let proof = self
-                    .acc
-                    .prove(&[node])
-                    .map_err(|e| anyhow::anyhow!("{}", e))?;
-                Ok(Responses::Proof(proof))
-            }
-            Requests::GetRoots => {
-                let roots = self.acc.get_roots().iter().map(|x| x.get_data()).collect();
-                Ok(Responses::Roots(roots))
-            }
-            Requests::GetBlockByHeight(height) => {
-                unimplemented!()
-            }
-            Requests::GetTxUnpent(txid) => {
-                // returns the unspent outputs of a transaction and a proof for them
-                let tx = self
-                    .rpc
-                    .get_transaction(txid)
-                    .map_err(|_| anyhow::anyhow!("Transaction {} not found", txid))?;
-
-                let (outputs, hashes): (Vec<TxOut>, Vec<AccumulatorHash>) = tx
-                    .output
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(idx, output)| {
-                        let (hash, _) = self.get_input_leaf_hash(&TxIn {
-                            previous_output: OutPoint {
-                                txid,
-                                vout: idx as u32,
-                            },
-                            script_sig: ScriptBuf::new(),
-                            sequence: Sequence::ZERO,
-                            witness: Witness::new(),
-                        });
-                        self.acc.prove(&[hash]).ok()?;
-                        Some((output.clone(), hash))
-                    })
-                    .unzip();
-
-                let proof = self
-                    .acc
-                    .prove(&hashes)
-                    .map_err(|e| anyhow::anyhow!("{}", e))?;
-
-                Ok(Responses::TransactionOut(outputs, proof))
-            }
-            Requests::GetTransaction(txid) => {
-                let tx = self
-                    .rpc
-                    .get_transaction(txid)
-                    .map_err(|_| anyhow::anyhow!("Transaction {} not found", txid))?;
-                // TODO: this is a bit of a hack, but it works for now.
-                // Rustreexo should have a way to check whether an element is in the
-                // pollard. We have this information in the map anyway.
-                let (_outputs, hashes): (Vec<TxOut>, Vec<AccumulatorHash>) = tx
-                    .output
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(idx, output)| {
-                        let (hash, _) = self.get_input_leaf_hash(&TxIn {
-                            previous_output: OutPoint {
-                                txid,
-                                vout: idx as u32,
-                            },
-                            script_sig: ScriptBuf::new(),
-                            sequence: Sequence::ZERO,
-                            witness: Witness::new(),
-                        });
-                        self.acc.prove(&[hash]).ok()?;
-                        Some((output.clone(), hash))
-                    })
-                    .unzip();
-
-                let proof = self
-                    .acc
-                    .prove(&hashes)
-                    .map_err(|e| anyhow::anyhow!("{}", e))?;
-
-                Ok(Responses::Transaction((tx, proof)))
-            }
-            Requests::GetCSN => {
-                let roots = self.acc.get_roots().iter().map(|x| x.get_data()).collect();
-                let leaves = self.acc.leaves;
-                Ok(Responses::CSN(Stump { roots, leaves }))
-            }
-            Requests::GetBlocksByHeight(height, count) => {
-                unimplemented!();
-            }
-            _ => Err(anyhow::anyhow!("Uniplemented request in prover")),
         }
     }
 
@@ -375,7 +236,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
 
             let mtp = self.rpc.get_mtp(block.header.prev_blockhash)?;
 
-            let (proof, leaves) = self.process_block(&block, height, mtp);
+            let (_proof, _leaves) = self.process_block(&block, height, mtp);
 
             self.height = height;
             if let Some(n) = self.snapshot_acc_every {
@@ -526,26 +387,6 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
     }
 }
 
-#[cfg(feature = "api")]
-/// All requests we can send to the prover. The prover will respond with the corresponding
-/// response element.
-pub enum Requests {
-    /// Get the proof for a given leaf hash.
-    GetProof(BitcoinNodeHash),
-    /// Get the roots of the accumulator.
-    GetRoots,
-    /// Get a block at a given height. This method returns the block and utreexo data for it.
-    GetBlockByHeight(u32),
-    /// Returns a transaction and a proof for all inputs
-    GetTransaction(Txid),
-    /// Returns the CSN of the current acc
-    GetCSN,
-    /// Returns multiple blocks and utreexo data for them.
-    GetBlocksByHeight(u32, u32),
-    GetTxUnpent(Txid),
-    // Returns SP1 proof corresponding to utreexo mutation during this block
-    GetSP1Proof(BlockHash),
-}
 /// All responses the prover will send.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Responses {
@@ -583,7 +424,7 @@ use bitcoin::ScriptBuf;
 
 use crate::udata::bitcoin_leaf_data::BitcoinLeafData;
 impl CsvUtxo {
-    pub fn as_bitcoin_leaf_data(self) -> BitcoinLeafData {
+    pub fn as_bitcoin_leaf_data(&self) -> BitcoinLeafData {
         let utxo = TxOut {
             value: Amount::from_sat(self.amount),
             script_pubkey: ScriptBuf::from_hex(&self.script).unwrap(),
@@ -593,7 +434,7 @@ impl CsvUtxo {
 }
 
 /// Loads the accumulator from a utxo dump. Returns loaded pollard and the block this Pollard corresponds to
-fn load_acc_from_utxo_dump(utxo_dump_path: &str, rpc: &Box<dyn Blockchain>) -> (Pollard, u32) {
+fn load_acc_from_utxo_dump(utxo_dump_path: &str) -> (Pollard, u32) {
     let file = File::open(utxo_dump_path).unwrap();
     let mut rdr = csv::Reader::from_reader(file);
     let mut leaf_datas = Vec::new();

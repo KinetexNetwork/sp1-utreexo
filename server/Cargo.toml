@@ -55,7 +55,6 @@ esplora = ["reqwest"]
 bitcoin = []
 node = []
 api = ["actix", "actix-web", "actix-session", "actix-cors", "actix-files"]
-shinigami = ["starknet-crypto"]
 memory-leaf-map = []
 
 [dev-dependencies]

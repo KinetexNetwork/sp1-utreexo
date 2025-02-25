@@ -1,25 +1,18 @@
-use std::env;
 use std::fs;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::RwLock;
 
 use actix_rt::signal::ctrl_c;
 use clap::Parser;
-use futures::channel::mpsc::channel;
 use log::info;
 use log::warn;
 
-use crate::api;
 use crate::block_index::BlocksIndex;
-use crate::blockfile::BlockFile;
 use crate::chainview;
 use crate::cli::CliArgs;
 use crate::get_chain_provider;
 use crate::init_logger;
 use crate::leaf_cache::DiskLeafStorage;
-use crate::node;
-use crate::node::Node;
 use crate::prover;
 use crate::subdir;
 
@@ -87,7 +80,7 @@ pub fn run_bridge() -> anyhow::Result<()> {
     //let leaf_data = HashMap::new(); // In-memory leaf storage,
     // faster than leaf_data but uses more memory
 
-    let (block_notifier_tx, block_notifier_rx) = std::sync::mpsc::channel();
+    let (block_notifier_tx, _block_notifier_rx) = std::sync::mpsc::channel();
     let snapshot_rate = cli_options.save_proofs_after.unwrap_or(50000);
     info!("snapshot rate = {}", snapshot_rate);
     let mut prover = prover::Prover::new(

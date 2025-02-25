@@ -1,4 +1,3 @@
-use bitcoin::p2p::Magic;
 use clap::Parser;
 use clap::ValueEnum;
 
@@ -9,17 +8,6 @@ pub enum Network {
     Testnet3,
     Signet,
     Regtest,
-}
-
-impl Network {
-    pub fn magic(&self) -> Magic {
-        match self {
-            Network::Mainnet => bitcoin::Network::Bitcoin.magic(),
-            Network::Testnet3 => bitcoin::Network::Testnet.magic(),
-            Network::Signet => bitcoin::Network::Signet.magic(),
-            Network::Regtest => bitcoin::Network::Regtest.magic(),
-        }
-    }
 }
 
 #[derive(Debug, Parser)]
