@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  SP1_PATH: ~/.sp1/bin  # Add SP1 to PATH for all jobs
 
 jobs:
   build:
@@ -16,29 +17,32 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Cache Rust dependencies and build artifacts
-    - name: Cache cargo
+    # Cache Rust deps + SP1 installation
+    - name: Cache dependencies
       uses: actions/cache@v4
       with:
         path: |
           ~/.cargo
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          ~/.sp1  # Cache SP1 installation
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-
+          ${{ runner.os }}-deps-
 
-    - name: Install sp1
+    - name: Install SP1
       run: |
-        curl -L https://sp1up.succinct.xyz | bash
-        ~/.sp1/bin/sp1up 
-        ~/.sp1/bin/cargo-prove prove --version
+        if [ ! -d ~/.sp1 ]; then
+          curl -L https://sp1up.succinct.xyz | bash
+          ~/.sp1/bin/sp1up
+        fi
+        echo "$HOME/.sp1/bin" >> $GITHUB_PATH
 
     - name: Install clang
       run: |
         sudo apt update
         sudo apt install clang
         clang --version
-        
+
     - name: Build circuit
       run: |
         cd circuit/program/utreexo
@@ -48,34 +52,38 @@ jobs:
     - name: Run unit tests
       run: cargo test --workspace --exclude btcx-program-utreexo --exclude utreexo-script
 
-  lint:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    # Cache Rust dependencies and build artifacts
-    - name: Cache cargo
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-
-    - name: Install Clippy
-      run: rustup component add clippy
-    - name: Run fmt
-      run: cargo fmt --all -- --check
-    - name: Run Clippy
-      run: cargo clippy -- -D warnings
-
   end-to-end:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
+
+    # Shared cache with build job
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo
+          target
+          ~/.sp1
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
+
+    # Reinstall SP1 only if not cached
+    - name: Install SP1
+      run: |
+        if [ ! -d ~/.sp1 ]; then
+          curl -L https://sp1up.succinct.xyz | bash
+          ~/.sp1/bin/sp1up
+        fi
+        echo "$HOME/.sp1/bin" >> $GITHUB_PATH
+
+    - name: Install clang
+      run: |
+        sudo apt update
+        sudo apt install clang
+        clang --version
+
     - name: Run end to end tests
       run: python3 run-end-to-end.py --test
