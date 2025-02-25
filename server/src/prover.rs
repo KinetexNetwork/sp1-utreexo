@@ -578,27 +578,22 @@ struct CsvUtxo {
     tx_type: String,
     address: String,
 }
-use crate::udata::bitcoin_leaf_data::BitcoinLeafData;
-
 use bitcoin::Amount;
 use bitcoin::ScriptBuf;
+
+use crate::udata::bitcoin_leaf_data::BitcoinLeafData;
 impl CsvUtxo {
     pub fn as_bitcoin_leaf_data(self) -> BitcoinLeafData {
         let utxo = TxOut {
             value: Amount::from_sat(self.amount),
             script_pubkey: ScriptBuf::from_hex(&self.script).unwrap(),
         };
-        BitcoinLeafData {
-            utxo,
-        }
+        BitcoinLeafData { utxo }
     }
 }
 
 /// Loads the accumulator from a utxo dump. Returns loaded pollard and the block this Pollard corresponds to
-fn load_acc_from_utxo_dump(
-    utxo_dump_path: &str,
-    rpc: &Box<dyn Blockchain>,
-)  -> (Pollard, u32) {
+fn load_acc_from_utxo_dump(utxo_dump_path: &str, rpc: &Box<dyn Blockchain>) -> (Pollard, u32) {
     let file = File::open(utxo_dump_path).unwrap();
     let mut rdr = csv::Reader::from_reader(file);
     let mut leaf_datas = Vec::new();
@@ -608,7 +603,7 @@ fn load_acc_from_utxo_dump(
             info!("Loaded utxos: {}", idx);
         }
         let utxo: CsvUtxo = result.unwrap();
-        
+
         if utxo.height > max_height {
             max_height = utxo.height;
         }
@@ -628,9 +623,7 @@ fn load_acc_from_utxo_dump(
         })
         .collect::<Vec<_>>();
     info!("Hashing done, starting to build pollard");
-    let chunks = leaf_hashes
-        .chunks(10000)
-        .collect::<Vec<_>>();
+    let chunks = leaf_hashes.chunks(10000).collect::<Vec<_>>();
     let mut acc = Pollard::new();
     for (idx, chunk) in chunks.iter().enumerate() {
         info!("Added {} utxos to pollard", idx * 10000);

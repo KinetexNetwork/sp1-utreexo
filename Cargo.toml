@@ -3,9 +3,7 @@ members = [
     "rustreexo",
     "server",
     "circuit/script",
-     "input-generator",
-     "txoutset",
-     "txoutset/examples/csv",
+    "input-generator",
 ]
 exclude = [
     "circuit/program/utreexo",

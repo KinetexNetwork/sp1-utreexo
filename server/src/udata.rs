@@ -302,9 +302,7 @@ pub mod bitcoin_leaf_data {
         pub fn compute_hash(&self) -> BitcoinNodeHash {
             let mut ser_utxo = vec![];
             let _ = self.utxo.consensus_encode(&mut ser_utxo);
-            let leaf_hash = Sha512_256::new()
-                .chain_update(ser_utxo)
-                .finalize();
+            let leaf_hash = Sha512_256::new().chain_update(ser_utxo).finalize();
             BitcoinNodeHash::from(leaf_hash.as_slice())
         }
     }
@@ -320,9 +318,7 @@ pub mod bitcoin_leaf_data {
             reader: &mut R,
         ) -> Result<Self, bitcoin::consensus::encode::Error> {
             let utxo = TxOut::consensus_decode(reader)?;
-            Ok(BitcoinLeafData {
-                utxo,
-            })
+            Ok(BitcoinLeafData { utxo })
         }
     }
 
