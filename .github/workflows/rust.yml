@@ -23,9 +23,9 @@ jobs:
         sp1up -v v4.0.1
     - name: Install clang
       run: |
-        wget https://apt.llvm.org/llvm.sh
-        chmod +x llvm.sh
-        sudo ./llvm.sh <version number>
+        sudo apt update
+        sudo apt install clang
+        clang --version
         
     - name: Build circuit
       run: |
