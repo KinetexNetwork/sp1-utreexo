@@ -11,16 +11,28 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
+
+    # Cache Rust dependencies and build artifacts
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
     - name: Install sp1
       run: |
         curl -L https://sp1up.succinct.xyz | bash
         ~/.sp1/bin/sp1up 
         ~/.sp1/bin/cargo-prove prove --version
+
     - name: Install clang
       run: |
         sudo apt update
@@ -35,14 +47,24 @@ jobs:
       run: cargo build --workspace --exclude btcx-program-utreexo --exclude utreexo-script
     - name: Run unit tests
       run: cargo test --workspace --exclude btcx-program-utreexo --exclude utreexo-script
-    
 
   lint:
-
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
+
+    # Cache Rust dependencies and build artifacts
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
     - name: Install Clippy
       run: rustup component add clippy
     - name: Run fmt
@@ -51,7 +73,6 @@ jobs:
       run: cargo clippy -- -D warnings
 
   end-to-end:
-
     runs-on: ubuntu-latest
 
     steps:
