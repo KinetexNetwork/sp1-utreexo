@@ -50,8 +50,6 @@ Run with generating proof:
 SP1_PROVER=network NETWORK_PRIVATE_KEY=<YOUR_PRIVATE_KEY> cargo r --release -- --prove --exact 5
 ```
 
-
-
 ## Aknowledgements
 `server` and `rustreexo` are based on the work of Davidson-Souza and mit-dci:
 https://github.com/mit-dci/rustreexo
