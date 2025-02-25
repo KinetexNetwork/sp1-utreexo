@@ -37,7 +37,6 @@ use crate::udata::LeafData;
 
 pub type AccumulatorHash = rustreexo::accumulator::node_hash::BitcoinNodeHash;
 
-
 pub trait LeafCache: Sync + Send + Sized + 'static {
     fn remove(&mut self, outpoint: &OutPoint) -> Option<LeafContext>;
     fn insert(&mut self, outpoint: OutPoint, leaf_data: LeafContext) -> bool;

@@ -73,8 +73,4 @@ impl BlocksIndex {
             .expect("Failed to write index");
         bucket.flush().unwrap();
     }
-
-
-
-
 }

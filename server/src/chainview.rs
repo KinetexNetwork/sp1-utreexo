@@ -15,7 +15,6 @@ impl ChainView {
         Self { storage }
     }
 
-
     pub fn flush(&self) {
         let _ = self
             .storage
@@ -29,8 +28,6 @@ impl ChainView {
             .unwrap()
             .flush();
     }
-
-
 
     pub fn save_header(&self, hash: BlockHash, header: Vec<u8>) -> Result<(), kv::Error> {
         let bucket = self
@@ -52,7 +49,6 @@ impl ChainView {
         )?;
         Ok(())
     }
-
 
     pub fn save_height(&self, hash: BlockHash, height: u32) -> Result<(), kv::Error> {
         let bucket = self

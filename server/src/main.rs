@@ -8,7 +8,6 @@ mod esplora;
 
 mod prover;
 
-
 mod block_index;
 mod chaininterface;
 mod chainview;
@@ -26,9 +25,6 @@ use jemallocator::Jemalloc;
 use log::info;
 use simplelog::Config;
 use simplelog::SharedLogger;
-
-
-
 
 pub mod bitcoin_bridge;
 

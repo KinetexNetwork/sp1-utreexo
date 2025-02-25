@@ -258,7 +258,6 @@ impl From<Block> for UtreexoBlock {
     }
 }
 
-
 pub mod bitcoin_leaf_data {
     use bitcoin::consensus::Decodable;
     use bitcoin::consensus::Encodable;
