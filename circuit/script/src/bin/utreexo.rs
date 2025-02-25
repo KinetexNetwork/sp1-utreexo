@@ -67,7 +67,7 @@ pub enum ScriptPubkeyType {
 
 // FIXME: This is fragile, it should be rather optional
 const ELF: &[u8] = include_bytes!(
-    "../../../program/utreexo/target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
+    "../../../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
 );
 
 async fn get_block(height: u32) -> Result<Block, Box<dyn Error>> {

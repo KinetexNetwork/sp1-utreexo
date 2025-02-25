@@ -10,5 +10,9 @@ members = [
     "circuit/program/utreexo",
 ]
 
+exclude = [
+    "circuit/script/bin",
+]
+
 [profile.release]
 debug = true
