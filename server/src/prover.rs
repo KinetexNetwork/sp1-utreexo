@@ -133,7 +133,7 @@ pub struct Prover<LeafStorage: LeafCache> {
     proving_key: SP1ProvingKey,
     verification_key: SP1VerifyingKey,
 
-    zk_proof_storage: zk::ProofStorage,
+    zk_proof_storage: Arc<Mutex<zk::ProofStorage>>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -150,7 +150,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         shutdown_flag: Arc<Mutex<bool>>,
         save_proofs_for_blocks_older_than: u32,
         block_notification: Sender<BlockHash>,
-        sp1_proofs_path: String,
+        sp1_proofs: Arc<Mutex<ProofStorage>>,
     ) -> Prover<LeafStorage> {
         if start_height.is_some() {
             info!("Start height manually provided");
@@ -178,7 +178,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
             prover_client: prover,
             proving_key,
             verification_key,
-            zk_proof_storage: ProofStorage::new(sp1_proofs_path),
+            zk_proof_storage: sp1_proofs,
         }
     }
 
@@ -216,6 +216,8 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
             Requests::GetSP1Proof(height) => {
                 let proof = self
                     .zk_proof_storage
+                    .lock()
+                    .unwrap()
                     .get_proof(height)
                     .ok_or(anyhow::anyhow!("Proof not found"))?;
                 info!("Prover returned proof: {:#?}", proof);
@@ -548,7 +550,13 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
 
         let proof = self.acc.prove(&inputs).unwrap();
 
-        if !self.zk_proof_storage.keys().contains(&height) {
+        if !self
+            .zk_proof_storage
+            .lock()
+            .unwrap()
+            .keys()
+            .contains(&height)
+        {
             // do some zk stuff
             info!("stripping pollard. height: {height}");
             let flagged_pollard = self.acc.clone().fake_modify(&utxos, &inputs);
@@ -566,7 +574,10 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
             // set_max_level(log::LevelFilter::Info);
             info!("generated proof. height: {height}");
             self.acc.modify(&utxos, &inputs).unwrap();
-            self.zk_proof_storage.add_proof(height, sp1_proof);
+            self.zk_proof_storage
+                .lock()
+                .unwrap()
+                .add_proof(height, sp1_proof);
         } else {
             self.acc.modify(&utxos, &inputs).unwrap();
         }

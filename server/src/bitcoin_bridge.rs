@@ -10,6 +10,7 @@ use futures::channel::mpsc::channel;
 use log::info;
 use log::warn;
 
+use crate::zk::ProofStorage;
 use crate::api;
 use crate::block_index::BlocksIndex;
 use crate::blockfile::BlockFile;
@@ -87,6 +88,10 @@ pub fn run_bridge() -> anyhow::Result<()> {
     //let leaf_data = HashMap::new(); // In-memory leaf storage,
     // faster than leaf_data but uses more memory
 
+    let proof_storage = Arc::new(Mutex::new(ProofStorage::new(subdir(
+        "sp1_proofs",
+    ))));
+
     let (block_notifier_tx, block_notifier_rx) = std::sync::mpsc::channel();
     let snapshot_rate = cli_options.save_proofs_after.unwrap_or(50000);
     info!("snapshot rate = {}", snapshot_rate);
@@ -101,7 +106,7 @@ pub fn run_bridge() -> anyhow::Result<()> {
         kill_signal.clone(),
         snapshot_rate,
         block_notifier_tx,
-        subdir("sp1_proofs"),
+        proof_storage.clone(),
     );
 
     let (sender, receiver) = channel(1024);
@@ -112,7 +117,7 @@ pub fn run_bridge() -> anyhow::Result<()> {
     let host = env::var("API_HOST").unwrap_or_else(|_| "127.0.0.1:3000".into());
     std::thread::spawn(move || {
         actix_rt::System::new()
-            .block_on(api::create_api(sender, view, &host))
+            .block_on(api::create_api(sender, view, proof_storage.clone(), &host))
             .unwrap()
     });
 

@@ -32,6 +32,7 @@ use crate::prover::Requests;
 use crate::prover::Responses;
 use crate::udata::CompactLeafData;
 use crate::udata::UtreexoBlock;
+use crate::zk::ProofStorage;
 
 type SenderCh = Mutex<
     Sender<(
@@ -46,6 +47,7 @@ struct AppState {
     /// Sender to send requests to the prover.
     sender: SenderCh,
     view: Arc<ChainView>,
+    sp1proofs: Arc<std::sync::Mutex<ProofStorage>>,
 }
 
 /// This function is used to send a request to the prover and wait for the response, and
@@ -121,20 +123,16 @@ async fn get_sp1_proof(height: web::Path<u32>, data: web::Data<AppState>) -> imp
     let height = height.into_inner();
     info!("got sp1 proof request for height {height}");
 
-    let res = perform_request(&data, Requests::GetSP1Proof(height)).await;
+    let res = data.sp1proofs.lock().unwrap().get_proof(height);
 
     info!("sending responce for sp1 proof request for height {height}");
     match res {
-        Ok(Responses::SP1Proof(proof)) => HttpResponse::Ok().json(json!({
+        Some(proof) => HttpResponse::Ok().json(json!({
             "error": null,
             "data": JsonSP1Proof::from(proof),
         })),
-        Ok(_) => HttpResponse::InternalServerError().json(json!({
-            "error": "Invalid response",
-            "data": null
-        })),
-        Err(e) => HttpResponse::InternalServerError().json(json!({
-            "error": e,
+        None => HttpResponse::BadRequest().json(json!({
+            "error": "Proof not found",
             "data": null
         })),
     }
@@ -280,11 +278,13 @@ pub async fn create_api(
         futures::channel::oneshot::Sender<Result<Responses, String>>,
     )>,
     view: Arc<ChainView>,
+    proofs: Arc<std::sync::Mutex<ProofStorage>>,
     host: &str,
 ) -> std::io::Result<()> {
     let app_state = web::Data::new(AppState {
         sender: Mutex::new(request),
         view,
+        sp1proofs: proofs,
     });
     HttpServer::new(move || {
         let cors = Cors::permissive();
