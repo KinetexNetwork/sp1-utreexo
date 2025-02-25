@@ -20,10 +20,12 @@ use bitcoincore_rpc::jsonrpc::serde_json::json;
 use futures::channel::mpsc::Sender;
 use futures::lock::Mutex;
 use futures::SinkExt;
+use log::info;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::proof::Proof;
 use serde::Deserialize;
 use serde::Serialize;
+use sp1_sdk::SP1ProofWithPublicValues;
 
 use crate::chainview::ChainView;
 use crate::prover::Requests;
@@ -112,6 +114,30 @@ async fn get_proof(hash: web::Path<String>, data: web::Data<AppState>) -> impl R
         })),
     }
 }
+
+async fn get_sp1_proof(height: web::Path<u32>, data: web::Data<AppState>) -> impl Responder {
+    let height = height.into_inner();
+    info!("got sp1 proof request for height {height}");
+
+    let res = perform_request(&data, Requests::GetSP1Proof(height)).await;
+
+    info!("sending responce for sp1 proof request for height {height}");
+    match res {
+        Ok(Responses::SP1Proof(proof)) => HttpResponse::Ok().json(json!({
+            "error": null,
+            "data": JsonSP1Proof::from(proof),
+        })),
+        Ok(_) => HttpResponse::InternalServerError().json(json!({
+            "error": "Invalid response",
+            "data": null
+        })),
+        Err(e) => HttpResponse::InternalServerError().json(json!({
+            "error": e,
+            "data": null
+        })),
+    }
+}
+
 async fn get_transaction(hash: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
     let hash = hash.into_inner();
     let hash = Txid::from_str(&hash);
@@ -271,11 +297,33 @@ pub async fn create_api(
             .route("/batch_block/{height}/{n}", web::get().to(get_n_blocks))
             .route("/roots/{hash}", web::get().to(get_roots_for_block))
             .route("/tx/{hash}/unspent", web::get().to(get_tx_unspent))
+            .route("/sp1proof/{height}", web::get().to(get_sp1_proof))
     })
     .bind(host)?
     .run()
     .await
 }
+
+#[derive(Clone, Serialize, Deserialize)]
+struct JsonSP1Proof {
+    public_values: Vec<u8>,
+    proof: String,
+    version: String,
+}
+
+impl From<SP1ProofWithPublicValues> for JsonSP1Proof {
+    fn from(proof: SP1ProofWithPublicValues) -> Self {
+        let public_values = proof.public_values.to_vec();
+        let version = proof.sp1_version;
+        let proof = proof.proof.to_string();
+        Self {
+            public_values,
+            proof,
+            version,
+        }
+    }
+}
+
 /// The proof serialization by serde-json is not very nice, because it serializes byte-arrays
 /// as a array of integers. This struct is used to serialize the proof in a nicer way.
 #[derive(Clone, Serialize, Deserialize)]

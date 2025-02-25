@@ -103,6 +103,18 @@ pub fn run_bridge() -> anyhow::Result<()> {
         block_notifier_tx,
     );
 
+    let (sender, receiver) = channel(1024);
+
+    // This is our implementation of the json-rpc api, it will listen for
+    // incoming connections and serve some Utreexo data to clients.
+    info!("Starting api");
+    let host = env::var("API_HOST").unwrap_or_else(|_| "127.0.0.1:3000".into());
+    std::thread::spawn(move || {
+        actix_rt::System::new()
+            .block_on(api::create_api(sender, view, &host))
+            .unwrap()
+    });
+
     // Keep the prover running in the background, it will download blocks and
     // create proofs for them as they are mined.
     info!("Running prover");
@@ -114,5 +126,5 @@ pub fn run_bridge() -> anyhow::Result<()> {
         })
     });
 
-    prover.keep_up()
+    prover.keep_up(receiver)
 }

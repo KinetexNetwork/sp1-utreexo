@@ -18,7 +18,6 @@ compile_error!("This combination is not supported yet");
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-#[cfg(feature = "api")]
 mod api;
 
 #[cfg(not(feature = "shinigami"))]
@@ -52,6 +51,7 @@ use chaininterface::Blockchain;
 use jemallocator::Jemalloc;
 use log::info;
 use simplelog::Config;
+use simplelog::ConfigBuilder;
 use simplelog::SharedLogger;
 
 #[cfg(feature = "shinigami")]
@@ -80,10 +80,15 @@ fn subdir(path: &str) -> String {
 
 fn init_logger(log_file: Option<&str>, log_level: log::LevelFilter, log_to_term: bool) {
     let mut loggers: Vec<Box<dyn SharedLogger>> = vec![];
+
+    let config = ConfigBuilder::new()
+        .add_filter_ignore(format!("sp1-sdk"))
+        .add_filter_ignore(format!("sp1_sdk"))
+        .build();
     if let Some(file) = log_file {
         let file_logger = simplelog::WriteLogger::new(
             log_level,
-            Config::default(),
+            config.clone(),
             std::fs::File::create(file).unwrap(),
         );
         loggers.push(file_logger);
@@ -91,7 +96,7 @@ fn init_logger(log_file: Option<&str>, log_level: log::LevelFilter, log_to_term:
     if log_to_term {
         let term_logger = simplelog::TermLogger::new(
             log_level,
-            Config::default(),
+            config,
             simplelog::TerminalMode::Mixed,
             simplelog::ColorChoice::Auto,
         );

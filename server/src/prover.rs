@@ -28,12 +28,11 @@ use bitcoin::Script;
 use bitcoin::Transaction;
 use bitcoin::TxIn;
 use bitcoin::TxOut;
-#[cfg(feature = "api")]
 use bitcoin::Txid;
-#[cfg(feature = "api")]
 use futures::channel::mpsc::Receiver;
 use log::error;
 use log::info;
+use log::set_max_level;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use rustreexo::accumulator::proof::Proof;
@@ -56,7 +55,6 @@ use crate::udata::LeafContext;
 use crate::udata::LeafData;
 use crate::udata::UtreexoBlock;
 use crate::zk;
-
 
 const ELF: &[u8] = include_bytes!(
     "../../circuit/program/utreexo/target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
@@ -135,7 +133,6 @@ pub struct Prover<LeafStorage: LeafCache> {
     verification_key: SP1VerifyingKey,
 
     zk_proof_storage: zk::ProofStorage,
-
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -162,7 +159,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         info!("Loaded height {}", height);
         info!("Loading accumulator data...");
         let acc = Self::try_from_disk(start_acc);
-        let prover  = ProverClient::from_env();
+        let prover = ProverClient::from_env();
         let (proving_key, verification_key) = prover.setup(ELF);
         Self {
             snapshot_acc_every,
@@ -179,7 +176,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
             prover_client: prover,
             proving_key,
             verification_key,
-            zk_proof_storage: Default::default()
+            zk_proof_storage: Default::default(),
         }
     }
 
@@ -208,17 +205,16 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
     /// Handles the request from another module. It returns a response through the oneshot channel
     /// provided by the request sender. Errors are returned as strings, maybe this should be changed
     /// to a boxed error or something else.
-    #[cfg(feature = "api")]
     fn handle_request(&mut self, req: Requests) -> anyhow::Result<Responses> {
         use bitcoin::ScriptBuf;
         use bitcoin::Sequence;
         use bitcoin::Witness;
 
         match req {
-            Requests::GetSP1Proof(block_hash) => {
+            Requests::GetSP1Proof(height) => {
                 let proof = self
                     .zk_proof_storage
-                    .get_proof(&block_hash)
+                    .get_proof(height)
                     .ok_or(anyhow::anyhow!("Proof not found"))?;
                 info!("Prover returned proof: {:#?}", proof);
                 Ok(Responses::SP1Proof(proof))
@@ -342,7 +338,13 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
     /// A infinite loop that keeps the prover up to date with the blockchain. It handles requests
     /// from other modules and updates the accumulator when a new block is found. This method is
     /// also how we create proofs for historical blocks.
-    pub fn keep_up(&mut self) -> anyhow::Result<()> {
+    pub fn keep_up(
+        &mut self,
+        mut receiver: Receiver<(
+            Requests,
+            futures::channel::oneshot::Sender<Result<Responses, String>>,
+        )>,
+    ) -> anyhow::Result<()> {
         let mut last_tip_update = std::time::Instant::now();
         loop {
             if *self.shutdown_flag.lock().unwrap() {
@@ -350,6 +352,14 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
                 self.shutdown();
                 break;
             }
+
+            info!("Checking for requests");
+            if let Ok(Some((req, res))) = receiver.try_next() {
+                let ret = self.handle_request(req).map_err(|e| e.to_string());
+                res.send(ret)
+                    .map_err(|_| anyhow::anyhow!("Error sending response"))?;
+            }
+            info!("Requests processed");
 
             if last_tip_update.elapsed().as_secs() > 10 {
                 if let Err(e) = self.check_tip(&mut last_tip_update) {
@@ -367,9 +377,10 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
     }
 
     fn check_tip(&mut self, last_tip_update: &mut std::time::Instant) -> anyhow::Result<()> {
+        info!("check tip");
         let height = self.rpc.get_block_count()? as u32;
         if height > self.height {
-            self.prove_range(self.height + 1, height)?;
+            self.prove_range(self.height + 1, self.height + 2)?;
 
             self.save_to_disk(None)
                 .expect("could not save the acc to disk");
@@ -382,6 +393,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
 
     /// Proves a range of blocks, may be just one block.
     pub fn prove_range(&mut self, start: u32, end: u32) -> anyhow::Result<()> {
+        info!("prove range start: {start}, end: {end}");
         for height in start..=end {
             if *self.shutdown_flag.lock().unwrap() {
                 break;
@@ -480,6 +492,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
 
     /// Processes a block and returns the batch proof and the compact leaf data for the block.
     fn process_block(&mut self, block: &Block, height: u32, mtp: u32) -> (Proof, Vec<LeafContext>) {
+        info!("process block");
         let mut inputs = Vec::new();
         let mut utxos = Vec::new();
         let mut compact_leaves = Vec::new();
@@ -537,10 +550,13 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
 
         let proof = self.acc.prove(&inputs).unwrap();
 
-        if !self.zk_proof_storage.keys().contains(&block.block_hash()) {
+        if !self.zk_proof_storage.keys().contains(&height) {
             // do some zk stuff
+            info!("stripping pollard. height: {height}");
             let flagged_pollard = self.acc.clone().fake_modify(&utxos, &inputs);
             let stripped_pollard = flagged_pollard.get_stripped_pollard();
+            info!("generating proof. height: {height}");
+            set_max_level(log::LevelFilter::Off);
             let sp1_proof = zk::run_circuit(
                 block,
                 stripped_pollard,
@@ -549,10 +565,10 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
                 &self.prover_client,
                 &self.proving_key,
             );
-            let public_values = sp1_proof.public_values.as_slice();
+            set_max_level(log::LevelFilter::Info);
+            info!("generated proof. height: {height}");
             self.acc.modify(&utxos, &inputs).unwrap();
-            self.zk_proof_storage
-                .add_proof(block.block_hash(), sp1_proof);
+            self.zk_proof_storage.add_proof(height, sp1_proof);
         } else {
             self.acc.modify(&utxos, &inputs).unwrap();
         }
@@ -561,7 +577,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
     }
 }
 
-#[cfg(feature = "api")]
+
 /// All requests we can send to the prover. The prover will respond with the corresponding
 /// response element.
 pub enum Requests {
@@ -579,7 +595,7 @@ pub enum Requests {
     GetBlocksByHeight(u32, u32),
     GetTxUnpent(Txid),
     // Returns SP1 proof corresponding to utreexo mutation during this block
-    GetSP1Proof(BlockHash),
+    GetSP1Proof(u32),
 }
 /// All responses the prover will send.
 #[derive(Clone, Debug, Serialize, Deserialize)]

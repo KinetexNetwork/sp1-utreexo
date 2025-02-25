@@ -37,20 +37,23 @@ pub fn run_circuit(
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ProofStorage {
-    proofs_map: HashMap<bitcoin::BlockHash, SP1ProofWithPublicValues>,
+    proofs_map: HashMap<u32, SP1ProofWithPublicValues>,
 }
 
 impl ProofStorage {
     pub fn new() -> Self {
         Default::default()
     }
-    pub fn keys(&self) -> Vec<bitcoin::BlockHash> {
-        self.proofs_map.keys().map(|hash| hash.clone()).collect()
+    pub fn keys(&self) -> Vec<u32> {
+        self.proofs_map
+            .keys()
+            .map(|height| height.clone())
+            .collect()
     }
-    pub fn add_proof(&mut self, hash: bitcoin::BlockHash, proof: SP1ProofWithPublicValues) {
-        self.proofs_map.insert(hash, proof);
+    pub fn add_proof(&mut self, height: u32, proof: SP1ProofWithPublicValues) {
+        self.proofs_map.insert(height, proof);
     }
-    pub fn get_proof(&self, hash: &bitcoin::BlockHash) -> Option<SP1ProofWithPublicValues> {
-        self.proofs_map.get(hash).cloned()
+    pub fn get_proof(&self, height: u32) -> Option<SP1ProofWithPublicValues> {
+        self.proofs_map.get(&height).cloned()
     }
 }
