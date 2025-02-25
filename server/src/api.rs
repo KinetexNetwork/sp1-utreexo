@@ -95,8 +95,6 @@ async fn get_proof(hash: web::Path<String>, data: web::Data<AppState>) -> impl R
     }
     let hash = BitcoinNodeHash::from(bytes.unwrap().as_slice());
 
-
-
     let res = perform_request(&data, Requests::GetProof(hash)).await;
 
     match res {

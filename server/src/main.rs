@@ -31,6 +31,7 @@ mod esplora;
 mod node;
 
 mod prover;
+mod zk;
 
 #[cfg(feature = "shinigami")]
 mod shinigami_block_storage;

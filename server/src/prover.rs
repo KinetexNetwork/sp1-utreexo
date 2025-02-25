@@ -8,8 +8,10 @@
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
+use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Write;
+use std::io::{self};
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
@@ -38,9 +40,13 @@ use rustreexo::accumulator::proof::Proof;
 use rustreexo::accumulator::stump::Stump;
 use serde::Deserialize;
 use serde::Serialize;
-
-use std::io::{self, BufReader};
-
+use sp1_sdk::EnvProver;
+use sp1_sdk::ProverClient;
+use sp1_sdk::SP1ProofWithPublicValues;
+use sp1_sdk::SP1Prover;
+use sp1_sdk::SP1ProvingKey;
+use sp1_sdk::SP1Stdin;
+use sp1_sdk::SP1VerifyingKey;
 
 use crate::block_index::BlockIndex;
 use crate::block_index::BlocksIndex;
@@ -49,6 +55,12 @@ use crate::chainview;
 use crate::udata::LeafContext;
 use crate::udata::LeafData;
 use crate::udata::UtreexoBlock;
+use crate::zk;
+
+
+const ELF: &[u8] = include_bytes!(
+    "../../circuit/program/utreexo/target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
+);
 
 #[cfg(not(feature = "shinigami"))]
 pub type AccumulatorHash = rustreexo::accumulator::node_hash::BitcoinNodeHash;
@@ -117,6 +129,13 @@ pub struct Prover<LeafStorage: LeafCache> {
     save_proofs_for_blocks_older_than: u32,
     block_notification: Sender<BlockHash>,
     ibd: bool,
+
+    prover_client: EnvProver,
+    proving_key: SP1ProvingKey,
+    verification_key: SP1VerifyingKey,
+
+    zk_proof_storage: zk::ProofStorage,
+
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -143,6 +162,8 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         info!("Loaded height {}", height);
         info!("Loading accumulator data...");
         let acc = Self::try_from_disk(start_acc);
+        let prover  = ProverClient::from_env();
+        let (proving_key, verification_key) = prover.setup(ELF);
         Self {
             snapshot_acc_every,
             rpc,
@@ -155,6 +176,10 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
             save_proofs_for_blocks_older_than,
             block_notification,
             ibd: true,
+            prover_client: prover,
+            proving_key,
+            verification_key,
+            zk_proof_storage: Default::default()
         }
     }
 
@@ -180,8 +205,6 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         }
     }
 
-
-
     /// Handles the request from another module. It returns a response through the oneshot channel
     /// provided by the request sender. Errors are returned as strings, maybe this should be changed
     /// to a boxed error or something else.
@@ -192,14 +215,14 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         use bitcoin::Witness;
 
         match req {
-            // Requests::GetSP1Proof(block_hash) => {
-            //     let proof = self
-            //         .zk_proof_storage
-            //         .get_proof(&block_hash)
-            //         .ok_or(anyhow::anyhow!("Proof not found"))?;
-            //     info!("Prover returned proof: {:#?}", proof);
-            //     Ok(Responses::SP1Proof(proof))
-            // }
+            Requests::GetSP1Proof(block_hash) => {
+                let proof = self
+                    .zk_proof_storage
+                    .get_proof(&block_hash)
+                    .ok_or(anyhow::anyhow!("Proof not found"))?;
+                info!("Prover returned proof: {:#?}", proof);
+                Ok(Responses::SP1Proof(proof))
+            }
             Requests::GetProof(node) => {
                 let proof = self
                     .acc
@@ -514,21 +537,25 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
 
         let proof = self.acc.prove(&inputs).unwrap();
 
-        // if !self.zk_proof_storage.keys().contains(&block.block_hash()) {
-        //     // do some zk stuff
-        //     let flagged_pollard = self.acc.clone().fake_modify(&utxos, &inputs);
-        //     let stripped_pollard = flagged_pollard.get_stripped_pollard();
-        //     let sp1_proof = zk::run_circuit(block, stripped_pollard, &input_leaf_hashes, height, &self.prover_client, &self.proving_key);
-        //     let public_values = sp1_proof.public_values.as_slice();
-        //     self.acc.modify(&utxos, &inputs).unwrap();
-        //     let expected_public_values = zk::get_expected_output(&self.acc);
-        //     assert_eq!(public_values, expected_public_values);
-        //     self.zk_proof_storage
-        //         .add_proof(block.block_hash(), sp1_proof.proof);
-        // } else {
-        //     self.acc.modify(&utxos, &inputs).unwrap();
-        // }
-        self.acc.modify(&utxos, &inputs).unwrap(); // rm this when uncomment above
+        if !self.zk_proof_storage.keys().contains(&block.block_hash()) {
+            // do some zk stuff
+            let flagged_pollard = self.acc.clone().fake_modify(&utxos, &inputs);
+            let stripped_pollard = flagged_pollard.get_stripped_pollard();
+            let sp1_proof = zk::run_circuit(
+                block,
+                stripped_pollard,
+                &input_leaf_hashes,
+                height,
+                &self.prover_client,
+                &self.proving_key,
+            );
+            let public_values = sp1_proof.public_values.as_slice();
+            self.acc.modify(&utxos, &inputs).unwrap();
+            self.zk_proof_storage
+                .add_proof(block.block_hash(), sp1_proof);
+        } else {
+            self.acc.modify(&utxos, &inputs).unwrap();
+        }
 
         (proof, compact_leaves)
     }
@@ -571,4 +598,5 @@ pub enum Responses {
     /// Multiple blocks and utreexo data for them.
     Blocks(Vec<Vec<u8>>),
     TransactionOut(Vec<TxOut>, Proof),
+    SP1Proof(SP1ProofWithPublicValues),
 }
