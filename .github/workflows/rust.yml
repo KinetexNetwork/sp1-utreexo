@@ -21,10 +21,16 @@ jobs:
         curl -L https://sp1.succinct.xyz | bash
         export PATH="$PATH:$HOME/.sp1/bin"
         sp1up -v v4.0.1
+    - name: Install clang
+      run: |
+        wget https://apt.llvm.org/llvm.sh
+        chmod +x llvm.sh
+        sudo ./llvm.sh <version number>
+        
     - name: Build circuit
       run: |
         cd circuit/program/utreexo
-        cargo-prove prove build
+        cc=clang CC=clang cargo-prove prove build
     - name: Build
       run: cargo build --workspace --exclude btcx-program-utreexo --exclude utreexo-script
     - name: Run unit tests
