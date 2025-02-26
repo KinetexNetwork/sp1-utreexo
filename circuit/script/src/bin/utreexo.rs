@@ -11,9 +11,11 @@ use sp1_sdk::{utils, ProverClient, SP1Stdin};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, File};
+use std::io;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::ops::Deref;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use threadpool::ThreadPool;
@@ -64,11 +66,6 @@ pub enum ScriptPubkeyType {
     /// p2wsh
     WitnessV0ScriptHash,
 }
-
-// FIXME: This is fragile, it should be rather optional
-const ELF: &[u8] = include_bytes!(
-    "../../../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
-);
 
 async fn get_block(height: u32) -> Result<Block, Box<dyn Error>> {
     // Step 1: Get the block hash for the given height
@@ -170,6 +167,11 @@ fn read_height_from_file(file_path: &str) -> u32 {
         .unwrap()
 }
 
+fn load_elf<P: AsRef<Path>>(path: P) -> io::Result<&'static [u8]> {
+    let bytes = fs::read(path)?;
+    Ok(Box::leak(bytes.into_boxed_slice()))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cargo_root = env!("CARGO_MANIFEST_DIR");
@@ -179,6 +181,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         eprintln!("Error: You must specify either --execute or --prove");
         std::process::exit(1);
     }
+
+    let relative_elf_path =
+        "../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo";
+    let elf_path = Path::new(&cargo_root).join(relative_elf_path);
+
+    let elf = load_elf(dbg!(elf_path)).unwrap();
+
+    // some = "sdf";
+
     let mut available_tx_counts = get_block_heights(&format!("{cargo_root}/../acc-data/")).unwrap();
     available_tx_counts.sort();
     if let Some(exact) = args.exact {
@@ -223,7 +234,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             stdin.write::<HashMap<TxIn, BitcoinNodeHash>>(&input_leaf_hashes);
 
             let client = ProverClient::from_env();
-            let public_values = client.execute(ELF, &stdin).run().unwrap();
+            let public_values = client.execute(elf, &stdin).run().unwrap();
             let actual_bytes = public_values.0.as_slice();
             let expected_bytes = get_output_bytes(&acc_after_path);
             let unexpected_bytes = get_output_bytes(&acc_before_path);
@@ -293,7 +304,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 stdin.write::<HashMap<TxIn, BitcoinNodeHash>>(&input_leaf_hashes);
 
                 let client = Arc::new(ProverClient::from_env());
-                let (pk, vk) = client.setup(ELF);
+                let (pk, vk) = client.setup(elf);
                 let start = Instant::now();
                 let proof = client
                     .prove(&pk, &stdin)

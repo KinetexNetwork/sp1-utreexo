@@ -65,9 +65,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
 
-    # Clippy will fail without this step.
-    - name: Build riscv32 binary
-      run: cc=clang CC=clang cargo b --release --bin utreexo
     - name: Install Clippy
       run: rustup component add clippy
     - name: Run fmt

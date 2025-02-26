@@ -1586,7 +1586,7 @@ mod test {
 
         p.restore_used_flag();
 
-        let markuped = p.fake_modify(&[BitcoinNodeHash::from(&[1 as u8; 32])], &[]);
+        let markuped = p.fake_modify(&[BitcoinNodeHash::from(&[1_u8; 32])], &[]);
 
         for root in markuped.get_roots() {
             println!("Root used? - {:#?}", root.used.get());

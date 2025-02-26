@@ -473,7 +473,7 @@ mod test {
             .target_values
             .as_ref()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|target| hash_from_u8(*target as u8))
             .collect::<Vec<_>>();
 
