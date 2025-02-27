@@ -3,8 +3,8 @@
 
 use bitcoin::consensus::Encodable;
 use bitcoin::{BlockHash, OutPoint, TxOut, VarInt};
-use bitcoin_hashes::serde::{Deserialize, Serialize};
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512_256};
 
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]

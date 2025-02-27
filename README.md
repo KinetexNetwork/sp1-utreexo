@@ -17,9 +17,17 @@ Project is WIP and here is the list of things we already have:
 - [x] we implemented some robust performance optimizations for circuit
 
 TODO:
+- [ ] To make the program under `program/utreexo/src` runnable on native devices (for profiling purposes).
+- [ ] To bring back the borrowing checker available within the program's crate.
 - [ ] integrate circuit with the server
-- [ ] add endpoints to server for getting utreexo proofs and utreexo roots for given height 
+- [ ] add endpoints to server for getting utreexo proofs and utreexo roots for given height
 
+## Prerequisites
+
+1. Install sp1 riscv32 toolchain: `sp1up --c-toolchain` -- it installs toolchain without includes of riscv32 which is necessary for make the project compiles.
+2. Install riscv toolchain on your system: `brew tap riscv-software-src/riscv && brew install riscv-gnu-toolchain`
+3. Export headers into terminal session: `export SP1_CFLAGS="-I$(brew --prefix riscv-gnu-toolchain)/riscv64-unknown-elf/include"`
+4. (Optional) Export riscv32 compiler into terminal session: `export CC_riscv32im_succinct_zkvm_elf=~/.sp1/bin/riscv32-unknown-elf-gcc`
 
 ## How to run
 
@@ -28,26 +36,25 @@ From very high level there are two steps:
 - run `python3 run-end-to-end.py` from the root of the project
 
 Run with profiling:
-```
-cd circuit/script
-TRACE_FILE=output.json TRACE_SAMPLE_RATE=100 cargo run --release -- --execute --exact 5
+```bash
+CFLAGS=$SP1_CFLAGS TRACE_FILE=output.json TRACE_SAMPLE_RATE=100 cargo run --release --bin utreexo -- --execute --exact 5
 ```
 
 Building circuit:
+```bash
+CFLAGS=$SP1_CFLAGS cargo prove build
 ```
-cd circuit/program/utreexo
-cargo prove build
-```
-May fail, try to install sp1 WITHOUT `--c-toolchain` and make envs cc and/or CC pointing to clang >=16
 
 Run circuit without generating proof with checking that utreexo roots computed in circuit and out of circuit match:
+
+```bash
+CFLAGS=$SP1_CFLAGS cargo run --release --bin utreexo -- --execute --exact 5
 ```
-cd circuit/script
-cargo run --release -- --execute --exact 5
-```
+
 Run with generating proof:
-```
-SP1_PROVER=network NETWORK_PRIVATE_KEY=<YOUR_PRIVATE_KEY> cargo r --release -- --prove --exact 5
+
+```bash
+SP1_PROVER=network NETWORK_PRIVATE_KEY=$NETWORK_PRIVATE_KEY cargo r --release --bin utreexo -- --prove --exact 5
 ```
 
 ## Aknowledgements

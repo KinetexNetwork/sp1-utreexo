@@ -238,7 +238,7 @@ pub fn parent_many(pos: u64, rise: u8, forest_rows: u8) -> Result<u64, String> {
         ));
     }
     let mask = (2_u64 << forest_rows) - 1;
-    Ok((pos >> rise | (mask << (forest_rows - (rise - 1)) as u64)) & mask)
+    Ok(((pos >> rise) | (mask << (forest_rows - (rise - 1)) as u64)) & mask)
 }
 
 pub fn is_ancestor(higher_pos: u64, lower_pos: u64, forest_rows: u8) -> Result<bool, String> {
@@ -309,18 +309,7 @@ pub fn get_proof_positions(targets: &[u64], num_leaves: u64, forest_rows: u8) ->
     proof_positions
 }
 #[cfg(test)]
-pub fn hash_from_u8(value: u8) -> BitcoinNodeHash {
-    use bitcoin_hashes::sha256;
-    use bitcoin_hashes::Hash;
-    use bitcoin_hashes::HashEngine;
-    let mut engine = bitcoin_hashes::sha256::Hash::engine();
-
-    engine.input(&[value]);
-
-    sha256::Hash::from_engine(engine).into()
-}
-#[cfg(test)]
-mod tests {
+pub mod tests {
     use std::str::FromStr;
     use std::vec;
 
@@ -328,6 +317,16 @@ mod tests {
     use crate::accumulator::node_hash::BitcoinNodeHash;
     use crate::accumulator::util::children;
     use crate::accumulator::util::tree_rows;
+    use bitcoin_hashes::HashEngine;
+    use bitcoin_hashes::Sha256 as Data;
+
+    pub fn hash_from_u8(value: u8) -> BitcoinNodeHash {
+        let mut engine = Data::engine();
+
+        engine.input(&[value]);
+
+        BitcoinNodeHash::from(Data::from_engine(engine).as_byte_array())
+    }
 
     #[test]
     fn test_proof_pos() {

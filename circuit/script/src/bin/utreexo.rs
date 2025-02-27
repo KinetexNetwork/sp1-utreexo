@@ -11,10 +11,14 @@ use sp1_sdk::{utils, ProverClient, SP1Stdin};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, File};
+use std::io;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::ops::Deref;
+use std::path::Path;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use threadpool::ThreadPool;
 
 type PublicValuesTuple = sol! {
     (
@@ -63,12 +67,6 @@ pub enum ScriptPubkeyType {
     WitnessV0ScriptHash,
 }
 
-const ELF: &[u8] = include_bytes!(
-    "../../../program/utreexo/target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo"
-);
-
-// "../../../program/utreexo/elf/riscv32im-succinct-zkvm-elf"
-
 async fn get_block(height: u32) -> Result<Block, Box<dyn Error>> {
     // Step 1: Get the block hash for the given height
     let block_hash_url = format!("https://blockstream.info/api/block-height/{}", height);
@@ -113,11 +111,7 @@ fn get_input_leaf_hashes(file_path: &str) -> HashMap<TxIn, BitcoinNodeHash> {
     let reader = BufReader::new(file);
     let deserialized_struct: Vec<(TxIn, BitcoinNodeHash)> =
         serde_json::from_reader(reader).unwrap();
-    let mut res: HashMap<TxIn, BitcoinNodeHash> = Default::default();
-    for (k, v) in deserialized_struct {
-        res.insert(k, v);
-    }
-    res
+    deserialized_struct.into_iter().collect()
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -146,17 +140,18 @@ fn get_block_heights(data_path: &str) -> Result<Vec<u64>, Box<dyn Error>> {
         let entry = entry?;
         let path = entry.path();
 
-        if path.is_dir() {
-            if let Some(folder_name) = path.file_name().and_then(|n| n.to_str()) {
-                if let Some(caps) = re.captures(folder_name) {
-                    if let Some(num_match) = caps.get(1) {
-                        if let Ok(height) = num_match.as_str().parse::<u64>() {
-                            heights.push(height);
-                        } else {
-                            eprintln!("Warning: Couldn't parse height from '{}'", folder_name);
-                        }
-                    }
-                }
+        if let Some((folder_name, num_match)) = (if path.is_dir() {
+            path.file_name().and_then(|n| n.to_str())
+        } else {
+            None
+        })
+        .and_then(|s| {
+            re.captures(s)
+                .and_then(|caps| caps.get(1).map(|num_match| (s, num_match)))
+        }) {
+            match num_match.as_str().parse::<u64>() {
+                Ok(height) => heights.push(height),
+                Err(_) => eprintln!("Warning: Couldn't parse height from '{}'", folder_name),
             }
         }
     }
@@ -165,7 +160,6 @@ fn get_block_heights(data_path: &str) -> Result<Vec<u64>, Box<dyn Error>> {
 }
 
 fn read_height_from_file(file_path: &str) -> u32 {
-    // let file = File::open(file_path).unwrap();
     std::fs::read_to_string(file_path)
         .unwrap()
         .trim()
@@ -173,75 +167,91 @@ fn read_height_from_file(file_path: &str) -> u32 {
         .unwrap()
 }
 
+fn load_elf<P: AsRef<Path>>(path: P) -> io::Result<&'static [u8]> {
+    let bytes = fs::read(path)?;
+    Ok(Box::leak(bytes.into_boxed_slice()))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let cargo_root = env!("CARGO_MANIFEST_DIR");
     utils::setup_logger();
     let args = Args::parse();
     if args.execute == args.prove {
         eprintln!("Error: You must specify either --execute or --prove");
         std::process::exit(1);
     }
-    let mut available_tx_counts = get_block_heights("../acc-data/").unwrap();
+
+    let relative_elf_path =
+        "../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo";
+    let elf_path = Path::new(&cargo_root).join(relative_elf_path);
+
+    let elf = load_elf(dbg!(elf_path)).unwrap();
+
+    // some = "sdf";
+
+    let mut available_tx_counts = get_block_heights(&format!("{cargo_root}/../acc-data/")).unwrap();
     available_tx_counts.sort();
-    if args.exact.is_some() {
-        available_tx_counts = vec![args.exact.unwrap()];
+    if let Some(exact) = args.exact {
+        available_tx_counts = vec![exact];
     }
-    for tx_count in available_tx_counts {
-        let block_path: String = format!("../acc-data/block-{tx_count}txs/block.txt");
-        let block: Block =
-            bitcoin::consensus::deserialize(&fs::read(&block_path).unwrap()).unwrap();
 
-        let height_path = format!("../acc-data/block-{tx_count}txs/block-height.txt");
-        let height: u32 = read_height_from_file(&height_path);
+    if args.execute {
+        // TODO: Make it DRY
+        for tx_count in available_tx_counts {
+            let block_path = format!("{cargo_root}/../acc-data/block-{tx_count}txs/block.txt");
+            let block: Block =
+                bitcoin::consensus::deserialize(&fs::read(&block_path).unwrap()).unwrap();
 
-        println!("Calculated height: {height}");
-        let acc_before_path: String = format!("../acc-data/block-{tx_count}txs/acc-before.txt");
-        let acc_after_path: String = format!("../acc-data/block-{tx_count}txs/acc-after.txt");
-        let input_leaf_hashes_path: String =
-            format!("../acc-data/block-{tx_count}txs/input_leaf_hashes.txt");
+            let height_path =
+                format!("{cargo_root}/../acc-data/block-{tx_count}txs/block-height.txt");
+            let height: u32 = read_height_from_file(&height_path);
 
-        let serialized_acc_before = fs::read(&acc_before_path).unwrap();
+            println!("Calculated height: {height}");
+            let acc_before_path =
+                format!("{cargo_root}/../acc-data/block-{tx_count}txs/acc-before.txt");
+            let acc_after_path =
+                format!("{cargo_root}/../acc-data/block-{tx_count}txs/acc-after.txt");
+            let input_leaf_hashes_path =
+                format!("{cargo_root}/../acc-data/block-{tx_count}txs/input_leaf_hashes.txt");
 
-        let acc_before = Pollard::deserialize(Cursor::new(&serialized_acc_before)).unwrap();
+            let serialized_acc_before = fs::read(&acc_before_path).unwrap();
+            let acc_before = Pollard::deserialize(Cursor::new(&serialized_acc_before)).unwrap();
 
-        println!(
-            "acc before roots len = {}, acc before leaves len = {}",
-            acc_before.get_roots().len(),
-            acc_before.leaves
-        );
+            println!(
+                "acc before roots len = {}, acc before leaves len = {}",
+                acc_before.get_roots().len(),
+                acc_before.leaves
+            );
 
-        let input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash> =
-            get_input_leaf_hashes(&input_leaf_hashes_path);
+            let input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash> =
+                get_input_leaf_hashes(&input_leaf_hashes_path);
 
-        let mut stdin = SP1Stdin::new();
+            let mut stdin = SP1Stdin::new();
+            stdin.write::<Block>(&block);
+            stdin.write::<u32>(&height);
+            stdin.write::<Pollard>(&acc_before);
+            stdin.write::<HashMap<TxIn, BitcoinNodeHash>>(&input_leaf_hashes);
 
-        stdin.write::<Block>(&block);
-        stdin.write::<u32>(&height);
-        stdin.write::<Pollard>(&acc_before);
-        stdin.write::<HashMap<TxIn, BitcoinNodeHash>>(&input_leaf_hashes);
-
-        if args.execute {
             let client = ProverClient::from_env();
-            let public_values = client.execute(ELF, &stdin).run().unwrap();
+            let public_values = client.execute(elf, &stdin).run().unwrap();
             let actual_bytes = public_values.0.as_slice();
             let expected_bytes = get_output_bytes(&acc_after_path);
             let unexpected_bytes = get_output_bytes(&acc_before_path);
-            // Since we provide redused pollard it's roots will be different.
+
             assert_ne!(actual_bytes, unexpected_bytes);
             assert_eq!(actual_bytes, expected_bytes);
-            println!("Succesfully executed. Generating report.");
+            println!("Successfully executed. Generating report.");
 
             let cycles = public_values.1.total_instruction_count();
-            let acc_size = fs::File::open(acc_before_path)
+            let acc_size = fs::File::open(&acc_before_path)
                 .unwrap()
                 .metadata()
                 .unwrap()
                 .len();
             let mut block_str: Vec<u8> = Default::default();
-            let _ = get_block(height)
-                .await?
-                .consensus_encode(&mut block_str)
-                .unwrap();
+            let fetched_block = get_block(height).await?;
+            let _ = fetched_block.consensus_encode(&mut block_str).unwrap();
             let block_size = block_str.len();
 
             let metrics = MetricsCycles {
@@ -252,46 +262,86 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 tx_count,
             };
 
-            let file = File::create(format!("../metrics/{}.json", tx_count))?;
+            let file = File::create(format!("{cargo_root}/../metrics/{tx_count}.json"))?;
             serde_json::to_writer_pretty(file, &metrics)?;
-            println!("Report saved to ../metrics/{}.json", tx_count);
-        } else {
-            let client = ProverClient::from_env();
-            let (pk, vk) = client.setup(ELF);
-
-            let start = Instant::now();
-            let proof = client
-                .prove(&pk, &stdin)
-                .run()
-                .expect("failed to generate proof");
-            let duration = start.elapsed();
-            let acc_size = fs::File::open(&acc_before_path)
-                .unwrap()
-                .metadata()
-                .unwrap()
-                .len();
-            let mut block_str: Vec<u8> = Default::default();
-            let _ = get_block(height)
-                .await?
-                .consensus_encode(&mut block_str)
-                .unwrap();
-            let block_size = block_str.len();
-
-            let metrics = Metrics {
-                prove_duration: duration,
-                acc_size,
-                block_size: block_size as u64,
-                block_height: height as u64,
-                tx_count,
-            };
-
-            let file = File::create(format!("../metrics/{}.json", tx_count))?;
-            serde_json::to_writer_pretty(file, &metrics)?;
-
-            println!("Successfully generated proof!");
-            client.verify(&proof, &vk).expect("failed to verify proof");
-            println!("Successfully verified proof!");
+            println!("Report saved to {cargo_root}/../metrics/{tx_count}.json");
         }
+    } else {
+        let num_workers = available_tx_counts.len().max(1);
+        let pool = ThreadPool::new(num_workers);
+
+        for tx_count in available_tx_counts {
+            let cargo_root = cargo_root.to_string();
+            pool.execute(move || {
+                let block_path = format!("{cargo_root}/../acc-data/block-{tx_count}txs/block.txt");
+                let block =
+                    bitcoin::consensus::deserialize(&fs::read(&block_path).unwrap()).unwrap();
+
+                let height_path =
+                    format!("{cargo_root}/../acc-data/block-{tx_count}txs/block-height.txt");
+                let height: u32 = read_height_from_file(&height_path);
+                println!("Calculated height: {}", height);
+
+                let acc_before_path =
+                    format!("{cargo_root}/../acc-data/block-{tx_count}txs/acc-before.txt");
+                let input_leaf_hashes_path =
+                    format!("{cargo_root}/../acc-data/block-{tx_count}txs/input_leaf_hashes.txt");
+
+                let serialized_acc_before = fs::read(&acc_before_path).unwrap();
+                let acc_before = Pollard::deserialize(Cursor::new(&serialized_acc_before)).unwrap();
+
+                println!(
+                    "acc before roots len = {}, acc before leaves len = {}",
+                    acc_before.get_roots().len(),
+                    acc_before.leaves
+                );
+
+                let input_leaf_hashes = get_input_leaf_hashes(&input_leaf_hashes_path);
+                let mut stdin = SP1Stdin::new();
+                stdin.write::<Block>(&block);
+                stdin.write::<u32>(&height);
+                stdin.write::<Pollard>(&acc_before);
+                stdin.write::<HashMap<TxIn, BitcoinNodeHash>>(&input_leaf_hashes);
+
+                let client = Arc::new(ProverClient::from_env());
+                let (pk, vk) = client.setup(elf);
+                let start = Instant::now();
+                let proof = client
+                    .prove(&pk, &stdin)
+                    .run()
+                    .expect("failed to generate proof");
+                let duration = start.elapsed();
+
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                let acc_size = fs::File::open(&acc_before_path)
+                    .unwrap()
+                    .metadata()
+                    .unwrap()
+                    .len();
+                let mut block_str: Vec<u8> = Default::default();
+                let fetched_block = rt.block_on(get_block(height)).unwrap();
+                let _ = fetched_block.consensus_encode(&mut block_str).unwrap();
+                let block_size = block_str.len();
+
+                let metrics = Metrics {
+                    prove_duration: duration,
+                    acc_size,
+                    block_size: block_size as u64,
+                    block_height: height as u64,
+                    tx_count,
+                };
+
+                let metrics_path = format!("{cargo_root}/../metrics/{tx_count}.json");
+                let file = File::create(&metrics_path).unwrap();
+                serde_json::to_writer_pretty(file, &metrics).unwrap();
+
+                println!("Successfully generated proof for tx_count: {}!", tx_count);
+                client.verify(&proof, &vk).expect("failed to verify proof");
+                println!("Successfully verified proof for tx_count: {}!", tx_count);
+            });
+        }
+
+        pool.join();
     }
     Ok(())
 }

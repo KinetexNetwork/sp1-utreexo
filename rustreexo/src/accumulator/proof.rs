@@ -836,7 +836,7 @@ mod tests {
     use super::Proof;
     use crate::accumulator::node_hash::BitcoinNodeHash;
     use crate::accumulator::stump::Stump;
-    use crate::accumulator::util::hash_from_u8;
+    use crate::accumulator::util::tests::hash_from_u8;
     #[derive(Deserialize)]
     struct TestCase {
         numleaves: usize,

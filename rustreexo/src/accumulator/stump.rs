@@ -314,7 +314,7 @@ mod test {
     use super::Stump;
     use crate::accumulator::node_hash::BitcoinNodeHash;
     use crate::accumulator::proof::Proof;
-    use crate::accumulator::util::hash_from_u8;
+    use crate::accumulator::util::tests::hash_from_u8;
 
     #[derive(Debug, Deserialize)]
     struct TestCase {
@@ -473,7 +473,7 @@ mod test {
             .target_values
             .as_ref()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|target| hash_from_u8(*target as u8))
             .collect::<Vec<_>>();
 

@@ -178,7 +178,7 @@ fn process_block(
         for (idx, output) in tx.output.iter().enumerate() {
             if !output.script_pubkey.is_op_return() {
                 let header_code = if tx.is_coinbase() {
-                    height << 1 | 1
+                    (height << 1) | 1
                 } else {
                     height << 1
                 };

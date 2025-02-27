@@ -1205,13 +1205,11 @@ impl Display for Pollard {
 }
 #[cfg(test)]
 mod test {
-    use std::convert::TryFrom;
     use std::rc::Rc;
     use std::str::FromStr;
     use std::vec;
 
     use bitcoin_hashes::sha256::Hash as Data;
-    use bitcoin_hashes::Hash;
     use bitcoin_hashes::HashEngine;
     use serde::de::DeserializeOwned;
     use serde::Deserialize;
@@ -1228,6 +1226,7 @@ mod test {
 
         BitcoinNodeHash::from(Data::from_engine(engine).as_byte_array())
     }
+
     #[test]
     fn test_grab_node() {
         let values = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
@@ -1236,11 +1235,11 @@ mod test {
         let mut p = Pollard::new();
         p.modify(&hashes, &[]).expect("Pollard should not fail");
         let (found_target, found_sibling, _) = p.grab_node(4).unwrap();
-        let target = BitcoinNodeHash::try_from(
+        let target = BitcoinNodeHash::from_str(
             "e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71",
         )
         .unwrap();
-        let sibling = BitcoinNodeHash::try_from(
+        let sibling = BitcoinNodeHash::from_str(
             "e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db",
         )
         .unwrap();
@@ -1310,12 +1309,12 @@ mod test {
         let hashes: Vec<BitcoinNodeHash> = values.into_iter().map(hash_from_u8).collect();
         p.modify(&hashes, &Vec::new()).unwrap();
         let cloned_p = p.clone();
-        let serialized_cloned_p = bincode::serialize(&cloned_p).unwrap();
+        let _ = bincode::serialize(&cloned_p).unwrap();
         p.restore_used_flag();
 
         let stripped = p.get_stripped_pollard();
 
-        let serialized_p = bincode::serialize(&stripped).unwrap();
+        let _ = bincode::serialize(&stripped).unwrap();
     }
 
     #[test]
@@ -1581,13 +1580,13 @@ mod test {
             .map(|i| BitcoinNodeHash::from([i; 32]))
             .collect();
 
-        p.modify(&hashes, &[]);
+        let _ = p.modify(&hashes, &[]);
 
         println!("{:#?}", p);
 
         p.restore_used_flag();
 
-        let markuped = p.fake_modify(&[BitcoinNodeHash::from(&[1 as u8; 32])], &[]);
+        let markuped = p.fake_modify(&[BitcoinNodeHash::from(&[1_u8; 32])], &[]);
 
         for root in markuped.get_roots() {
             println!("Root used? - {:#?}", root.used.get());
