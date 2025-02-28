@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -20,6 +21,7 @@ use bitcoin::Script;
 use bitcoin::Transaction;
 use bitcoin::TxIn;
 use bitcoin::TxOut;
+use bitcoin::Txid;
 use log::error;
 use log::info;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
@@ -28,12 +30,14 @@ use rustreexo::accumulator::proof::Proof;
 use rustreexo::accumulator::stump::Stump;
 use serde::Deserialize;
 use serde::Serialize;
+use sha2::digest::typenum::Bit;
 
 use crate::block_index::BlocksIndex;
 use crate::chaininterface::Blockchain;
 use crate::chainview;
 use crate::udata::LeafContext;
 use crate::udata::LeafData;
+use crate::udata::calculate_out_hash;
 
 pub type AccumulatorHash = rustreexo::accumulator::node_hash::BitcoinNodeHash;
 
@@ -111,7 +115,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
             snapshot_acc_every,
             rpc,
             acc,
-            height: height - 5,
+            height: height,
             storage: index_database,
             view,
             leaf_data,
@@ -233,9 +237,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
                 block.txdata.len()
             );
 
-            let mtp = self.rpc.get_mtp(block.header.prev_blockhash)?;
-
-            let (_proof, _leaves) = self.process_block(&block, height, mtp);
+            let _proof = self.process_block(&block);
 
             self.height = height;
             if let Some(n) = self.snapshot_acc_every {
@@ -255,46 +257,6 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         anyhow::Ok(())
     }
 
-    /// Pulls the [LeafData] from the bitcoin core rpc. We use this as fallback if we can't find
-    /// the leaf in leaf_data. This method is slow and should only be used if we can't find the
-    /// leaf in the leaf_data.
-    fn get_input_leaf_hash_from_rpc(rpc: &dyn Blockchain, input: &TxIn) -> Option<LeafContext> {
-        let tx_info = rpc
-            .get_raw_transaction_info(&input.previous_output.txid)
-            .ok()?;
-
-        let height = tx_info.height;
-        let output = &tx_info.tx.output[input.previous_output.vout as usize];
-        let prev_block = rpc
-            .get_block_header(tx_info.blockhash?)
-            .ok()?
-            .prev_blockhash;
-
-        let median_time_past = rpc.get_mtp(prev_block).ok()?;
-
-        Some(LeafContext {
-            block_hash: tx_info.blockhash?,
-            median_time_past,
-            block_height: height,
-            is_coinbase: tx_info.is_coinbase,
-            pk_script: output.script_pubkey.clone(),
-            value: output.value.to_sat(),
-            vout: input.previous_output.vout,
-            txid: input.previous_output.txid,
-        })
-    }
-
-    /// Returns the leaf hash and the compact leaf data for a given input. If the leaf is not in
-    /// leaf_data we will try to get it from the bitcoin core rpc.
-    fn get_input_leaf_hash(&mut self, input: &TxIn) -> (AccumulatorHash, LeafContext) {
-        let leaf = self
-            .leaf_data
-            .remove(&input.previous_output)
-            .unwrap_or_else(|| Self::get_input_leaf_hash_from_rpc(&*self.rpc, input).unwrap());
-
-        (LeafData::get_leaf_hashes(&leaf), leaf)
-    }
-
     fn is_unspendable(script: &Script) -> bool {
         if script.len() > 10_000 {
             return true;
@@ -308,63 +270,79 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
     }
 
     /// Processes a block and returns the batch proof and the compact leaf data for the block.
-    fn process_block(&mut self, block: &Block, height: u32, mtp: u32) -> (Proof, Vec<LeafContext>) {
+    fn process_block(&mut self, block: &Block) -> Proof {
         let mut inputs = Vec::new();
         let mut utxos = Vec::new();
-        let mut compact_leaves = Vec::new();
 
-        let mut input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash> = Default::default();
+        let mut input_leaf_hashes: HashMap<BitcoinNodeHash, OutPoint> = Default::default();
 
         for tx in block.txdata.iter() {
             let txid = tx.compute_txid();
             for input in tx.input.iter() {
                 if !tx.is_coinbase() {
-                    let (hash, compact_leaf) = self.get_input_leaf_hash(input);
-                    input_leaf_hashes.insert(input.clone(), hash);
+                    let hash = calculate_out_hash(input.previous_output);
+                    input_leaf_hashes.insert(hash, input.previous_output);
                     if let Some(idx) = utxos.iter().position(|h| *h == hash) {
                         utxos.remove(idx);
                     } else {
                         inputs.push(hash);
-                        compact_leaves.push(compact_leaf);
                     }
                 }
             }
 
             for (idx, output) in tx.output.iter().enumerate() {
                 if !Self::is_unspendable(&output.script_pubkey) {
-                    let leaf = LeafContext {
-                        block_hash: block.block_hash(),
-                        median_time_past: mtp,
+                    let outpoint = OutPoint {
                         txid,
                         vout: idx as u32,
-                        value: output.value.to_sat(),
-                        pk_script: output.script_pubkey.clone(),
-                        is_coinbase: tx.is_coinbase(),
-                        block_height: height,
                     };
-
-                    utxos.push(LeafData::get_leaf_hashes(&leaf));
-
-                    let flush = self.leaf_data.insert(
-                        OutPoint {
-                            txid,
-                            vout: idx as u32,
-                        },
-                        leaf,
-                    );
-
-                    if flush {
-                        info!("Flushing leaf data, height={}", height);
-                        self.leaf_data.flush();
-                        self.save_to_disk(None)
-                            .expect("could not save the acc to disk");
-                        self.storage.update_height(self.height as usize);
-                    }
+                    utxos.push(calculate_out_hash(outpoint));
                 }
             }
         }
 
-        let proof = self.acc.prove(&inputs).unwrap();
+        let missing: Vec<u8> = vec![
+            11,
+            185,
+            5,
+            52,
+            41,
+            206,
+            96,
+            193,
+            49,
+            237,
+            193,
+            178,
+            63,
+            62,
+            57,
+            88,
+            80,
+            192,
+            237,
+            209,
+            18,
+            81,
+            131,
+            109,
+            1,
+            214,
+            1,
+            103,
+            177,
+            224,
+            24,
+            86,
+        ];
+        let missing_hash = BitcoinNodeHash::from(missing.as_slice());
+        println!("{:#?}", input_leaf_hashes.get(&missing_hash).unwrap());
+
+        let proof = self.acc.prove(&inputs);
+        if let Err(err) = proof.clone() {
+            println!("{}", err);
+        }
+        
 
         // if !self.zk_proof_storage.keys().contains(&block.block_hash()) {
         //     // do some zk stuff
@@ -382,7 +360,7 @@ impl<LeafStorage: LeafCache> Prover<LeafStorage> {
         // }
         self.acc.modify(&utxos, &inputs).unwrap(); // rm this when uncomment above
 
-        (proof, compact_leaves)
+        proof.unwrap()
     }
 }
 
@@ -418,17 +396,15 @@ struct CsvUtxo {
     tx_type: String,
     address: String,
 }
-use bitcoin::Amount;
-use bitcoin::ScriptBuf;
 
-use crate::udata::bitcoin_leaf_data::BitcoinLeafData;
 impl CsvUtxo {
-    pub fn as_bitcoin_leaf_data(&self) -> BitcoinLeafData {
-        let utxo = TxOut {
-            value: Amount::from_sat(self.amount),
-            script_pubkey: ScriptBuf::from_hex(&self.script).unwrap(),
+    pub fn hash(&self) -> BitcoinNodeHash {
+        let utxo = OutPoint {
+            txid: Txid::from_str(&self.txid).expect("Incorrect txid"),
+            vout: self.vout,
         };
-        BitcoinLeafData { utxo }
+        calculate_out_hash(utxo)
+
     }
 }
 
@@ -436,34 +412,25 @@ impl CsvUtxo {
 fn load_acc_from_utxo_dump(utxo_dump_path: &str) -> (Pollard, u32) {
     let file = File::open(utxo_dump_path).unwrap();
     let mut rdr = csv::Reader::from_reader(file);
-    let mut leaf_datas = Vec::new();
+    let mut utxo_hashes = vec![];
     let mut max_height = 0;
     for (idx, result) in rdr.deserialize().enumerate() {
         if idx % 10000 == 0 {
-            info!("Loaded utxos: {}", idx);
+            info!("Loaded & hashed utxos: {}", idx);
         }
         let utxo: CsvUtxo = result.unwrap();
-
         if utxo.height > max_height {
             max_height = utxo.height;
+            println!("Found utxo from block {}. Utxo Txid = {}", utxo.height, utxo.txid);
         }
-
-        let leaf_data = utxo.as_bitcoin_leaf_data();
-        leaf_datas.push(leaf_data);
+        let hash = utxo.hash();
+        let expected: Vec<u8> = vec![ 249, 106, 25, 21, 201, 242, 48, 43, 85, 176, 139, 122, 174, 57, 163, 43, 39, 35, 78, 236, 27, 20, 152, 134, 240, 243, 192, 34, 111, 72, 121, 26];
+        if hash == BitcoinNodeHash::from(expected.as_slice()) {
+            println!("HASH EXISTS!!!");
+        }
+        utxo_hashes.push(utxo.hash());
     }
-    info!("Loading done, starting to hash utxos");
-    let leaf_hashes = leaf_datas
-        .iter()
-        .enumerate()
-        .map(|(idx, leaf_data)| {
-            if idx % 10000 == 0 {
-                info!("Hashed utxos: {}", idx);
-            }
-            leaf_data.compute_hash()
-        })
-        .collect::<Vec<_>>();
-    info!("Hashing done, starting to build pollard");
-    let chunks = leaf_hashes.chunks(10000).collect::<Vec<_>>();
+    let chunks = utxo_hashes.chunks(10000).collect::<Vec<_>>();
     let mut acc = Pollard::new();
     for (idx, chunk) in chunks.iter().enumerate() {
         info!("Added {} utxos to pollard", idx * 10000);

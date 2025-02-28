@@ -738,7 +738,7 @@ impl Pollard {
     pub fn prove(&self, targets: &[BitcoinNodeHash]) -> Result<Proof, String> {
         let mut positions = Vec::new();
         for target in targets {
-            let node = self.map.get(target).ok_or("Could not find node")?;
+            let node = self.map.get(target).ok_or(&format!("Could not find node {:#?}", target))?;
             let position = self.get_pos(node);
             positions.push(position);
         }

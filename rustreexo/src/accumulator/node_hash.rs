@@ -54,7 +54,7 @@ use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
 
-#[derive(Eq, PartialEq, Copy, Clone, Hash, PartialOrd, Ord, Default)]
+#[derive(Eq, PartialEq, Copy, Clone, Hash, PartialOrd, Ord, Default, Debug)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 /// NodeHash is a wrapper around a 32 byte array that represents a hash of a node in the tree.
 /// # Example
@@ -84,19 +84,6 @@ impl Deref for BitcoinNodeHash {
     }
 }
 impl Display for BitcoinNodeHash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        if let BitcoinNodeHash::Some(ref inner) = self {
-            let mut s = String::new();
-            for byte in inner.iter() {
-                s.push_str(&format!("{:02x}", byte));
-            }
-            write!(f, "{}", s)
-        } else {
-            write!(f, "empty")
-        }
-    }
-}
-impl Debug for BitcoinNodeHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         if let BitcoinNodeHash::Some(ref inner) = self {
             let mut s = String::new();

@@ -331,4 +331,16 @@ pub mod bitcoin_leaf_data {
     }
 }
 
+use sha2::Sha256;
+use sha2::Digest;
+use rustreexo::accumulator::node_hash::BitcoinNodeHash;
+
+pub fn calculate_out_hash(out: bitcoin::OutPoint) -> BitcoinNodeHash {
+    let mut ser_utxo = vec![];
+    let _ = out.consensus_encode(&mut ser_utxo);
+    let hasher = Sha256::new();
+    let hash = hasher.chain_update(ser_utxo).finalize();
+    BitcoinNodeHash::from(hash.as_slice())
+}
+
 pub use bitcoin_leaf_data::BitcoinLeafData as LeafData;
