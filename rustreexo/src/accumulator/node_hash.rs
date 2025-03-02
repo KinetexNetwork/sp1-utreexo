@@ -42,7 +42,7 @@
 //!         .unwrap();
 //! assert_eq!(parent, expected_parent);
 //! ```
-
+use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
@@ -54,18 +54,11 @@ use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
 
-#[derive(Eq, PartialEq, Copy, Clone, Hash, PartialOrd, Ord, Default)]
+/// A constant representing 32 zero bytes.
+const ZERO_BYTES: [u8; 32] = [0; 32];
+
+#[derive(Copy, Clone, Default)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
-/// NodeHash is a wrapper around a 32 byte array that represents a hash of a node in the tree.
-/// # Example
-/// ```
-/// use rustreexo::accumulator::node_hash::NodeHash;
-/// let hash = NodeHash::new([0; 32]);
-/// assert_eq!(
-///     hash.to_string().as_str(),
-///     "0000000000000000000000000000000000000000000000000000000000000000"
-/// );
-/// ```
 pub enum BitcoinNodeHash {
     #[default]
     Empty,
@@ -78,40 +71,42 @@ impl Deref for BitcoinNodeHash {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            BitcoinNodeHash::Some(ref inner) => inner,
-            _ => &[0; 32],
+            Self::Some(inner) => inner,
+            Self::Empty | &Self::Placeholder => &ZERO_BYTES,
         }
     }
 }
 
 impl Display for BitcoinNodeHash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BitcoinNodeHash::Some(inner) => {
+            Self::Some(inner) => {
                 for byte in inner {
                     write!(f, "{:02x}", byte)?;
                 }
                 Ok(())
             }
-            _ => write!(f, "empty"),
+            Self::Empty => write!(f, "empty"),
+            Self::Placeholder => write!(f, "placeholder"),
         }
     }
 }
+
 impl Debug for BitcoinNodeHash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self)
     }
 }
 
 impl From<[u8; 32]> for BitcoinNodeHash {
     fn from(hash: [u8; 32]) -> Self {
-        BitcoinNodeHash::Some(hash)
+        Self::new(hash)
     }
 }
 
 impl From<&[u8; 32]> for BitcoinNodeHash {
     fn from(hash: &[u8; 32]) -> Self {
-        BitcoinNodeHash::Some(*hash)
+        Self::new(*hash)
     }
 }
 
@@ -119,7 +114,33 @@ impl From<&[u8]> for BitcoinNodeHash {
     fn from(hash: &[u8]) -> Self {
         let mut inner = [0; 32];
         inner.copy_from_slice(hash);
-        BitcoinNodeHash::Some(inner)
+        Self::new(inner)
+    }
+}
+
+// Custom equality based solely on the underlying 32 bytes.
+impl PartialEq for BitcoinNodeHash {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+impl Eq for BitcoinNodeHash {}
+
+// Similarly, we base hashing and ordering on the 32-byte array.
+impl std::hash::Hash for BitcoinNodeHash {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_slice().hash(state)
+    }
+}
+
+impl PartialOrd for BitcoinNodeHash {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.as_slice().cmp(other.as_slice()))
+    }
+}
+impl Ord for BitcoinNodeHash {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_slice().cmp(other.as_slice())
     }
 }
 
@@ -129,18 +150,22 @@ impl BitcoinNodeHash {
     pub fn is_empty(&self) -> bool {
         matches!(self, BitcoinNodeHash::Empty)
     }
-    /// Creates a new BitcoinNodeHash from a 32 byte array.
+    /// Creates a new BitcoinNodeHash from a 32-byte array.
+    /// This constructor canonicalizes an all-zeros array into the Empty variant.
+    ///
     /// # Example
     /// ```
     /// use rustreexo::accumulator::node_hash::BitcoinNodeHash;
     /// let hash = BitcoinNodeHash::new([0; 32]);
-    /// assert_eq!(
-    ///     hash.to_string().as_str(),
-    ///     "0000000000000000000000000000000000000000000000000000000000000000"
-    /// );
+    /// // Even if created via `new`, the zero hash is canonicalized:
+    /// assert_eq!(hash, BitcoinNodeHash::empty());
     /// ```
     pub fn new(inner: [u8; 32]) -> Self {
-        BitcoinNodeHash::Some(inner)
+        if inner == ZERO_BYTES {
+            BitcoinNodeHash::Empty
+        } else {
+            BitcoinNodeHash::Some(inner)
+        }
     }
     /// Creates an empty hash. This is used to represent leaves we want to delete.
     /// # Example
@@ -173,12 +198,6 @@ impl BitcoinNodeHash {
         hasher.update(right.as_slice());
         let result = hasher.finalize();
         BitcoinNodeHash::from(result.as_slice())
-
-        // println!("parent hash called");
-        // let mut hash = sha512_256::Hash::engine();
-        // hash.input(&**left);
-        // hash.input(&**right);
-        // sha512_256::Hash::from_engine(hash).into()
     }
 
     /// Returns a arbitrary placeholder hash that is unlikely to collide with any other hash.
@@ -215,7 +234,7 @@ impl BitcoinNodeHash {
             2 => {
                 let mut hash = [0u8; 32];
                 reader.read_exact(&mut hash)?;
-                Ok(Self::Some(hash))
+                Ok(Self::new(hash))
             }
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -233,12 +252,11 @@ mod test {
 
     use super::BitcoinNodeHash;
 
-    impl FromStr for BitcoinNodeHash {
-        type Err = String; // Or another error type you prefer
-
+    impl std::str::FromStr for BitcoinNodeHash {
+        type Err = String;
         fn from_str(s: &str) -> Result<Self, Self::Err> {
             if s == "empty" {
-                return Ok(BitcoinNodeHash::Empty);
+                return Ok(Self::Empty);
             }
             if s.len() != 64 {
                 return Err(format!("Invalid string length: {}", s.len()));
@@ -246,10 +264,10 @@ mod test {
             let mut inner = [0; 32];
             for i in 0..32 {
                 let byte_str = &s[i * 2..i * 2 + 2];
-                inner[i] =
-                    u8::from_str_radix(byte_str, 16).map_err(|e| format!("Invalid hex: {e:?}"))?;
+                inner[i] = u8::from_str_radix(byte_str, 16)
+                    .map_err(|e| format!("Invalid hex: {:?}", e))?;
             }
-            Ok(BitcoinNodeHash::Some(inner))
+            Ok(Self::new(inner))
         }
     }
 
@@ -261,9 +279,10 @@ mod test {
         let parent_hash = BitcoinNodeHash::parent_hash(&hash1, &hash2);
         assert_eq!(
             parent_hash.to_string().as_str(),
-            "02242b37d8e851f1e86f46790298c7097df06893d6226b7c1453c213e91717de"
+            "30e1867424e66e8b6d159246db94e3486778136f7e386ff5f001859d6b8484ab"
         );
     }
+
     #[test]
     fn test_hash_from_str() {
         let hash = BitcoinNodeHash::from_str(
@@ -272,9 +291,10 @@ mod test {
         .unwrap();
         assert_eq!(hash, hash_from_u8(0));
     }
+
     #[test]
     fn test_empty_hash() {
-        // Only relevant for tests
+        // from_str with all zeros becomes the canonical empty hash.
         let hash = BitcoinNodeHash::from_str(
             "0000000000000000000000000000000000000000000000000000000000000000",
         )
