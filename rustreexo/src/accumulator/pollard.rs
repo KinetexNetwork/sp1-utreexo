@@ -1299,6 +1299,7 @@ mod test {
         );
     }
 
+    #[ignore = "Too long to run each time"]
     #[test]
     fn test_pollard_size() {
         let mut p = Pollard::new();
