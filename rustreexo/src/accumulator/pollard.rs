@@ -1203,6 +1203,7 @@ impl Display for Pollard {
         write!(f, "{}", self.string())
     }
 }
+
 #[cfg(test)]
 mod test {
     use std::rc::Rc;

@@ -229,9 +229,8 @@ impl BitcoinNodeHash {
 mod test {
     use std::str::FromStr;
 
-    use crate::accumulator::util::tests::hash_from_u8;
-
     use super::BitcoinNodeHash;
+    use crate::accumulator::util::hash_from_u8;
 
     impl FromStr for BitcoinNodeHash {
         type Err = String; // Or another error type you prefer
