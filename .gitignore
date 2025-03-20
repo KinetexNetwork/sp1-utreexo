@@ -1,8 +1,14 @@
 *.log
+
+**/target/**
+!target/criterion
+!target/criterion/**
+target/criterion/**/*.json
+
+.DS_Store
+
 circuit/acc-data/*
 input-generator/acc-data/*
 input-generator/processed-acc-data/*
 server/acc-datas/*
 circuit/metrics/*
-
-target/
