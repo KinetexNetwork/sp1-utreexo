@@ -194,26 +194,26 @@ pub fn process_block(
             }
         }
     }
-    println!(
-        "Pollard: leaves: {}, roots: {}",
-        pollard.leaves,
-        pollard.get_roots().len()
-    );
+    // println!(
+    //     "Pollard: leaves: {}, roots: {}",
+    //     pollard.leaves,
+    //     pollard.get_roots().len()
+    // );
     let flagged_pollard = pollard.fake_modify(&utxos, &inputs);
-    for root in flagged_pollard.get_roots() {
-        println!("Root: {}", root.used.get());
-    }
-    println!(
-        "Flagged pollard: leaves: {}, roots: {}",
-        flagged_pollard.leaves,
-        flagged_pollard.get_roots().len()
-    );
+    // for root in flagged_pollard.get_roots() {
+    //     println!("Root: {}", root.used.get());
+    // }
+    // println!(
+    //     "Flagged pollard: leaves: {}, roots: {}",
+    //     flagged_pollard.leaves,
+    //     flagged_pollard.get_roots().len()
+    // );
     let stripped_pollard = flagged_pollard.get_stripped_pollard();
-    println!(
-        "Stripped pollard: leaves: {}, roots: {}",
-        stripped_pollard.leaves,
-        stripped_pollard.get_roots().len()
-    );
+    // println!(
+    //     "Stripped pollard: leaves: {}, roots: {}",
+    //     stripped_pollard.leaves,
+    //     stripped_pollard.get_roots().len()
+    // );
     let output_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("processed-acc-data")
         .join(format!("block-{}txs", tx_count));
@@ -237,7 +237,6 @@ pub fn write_input_leaf_hashes(input_leaf_hashes: &HashMap<TxIn, BitcoinNodeHash
 }
 
 pub fn read_height_from_file(file_path: &str) -> u32 {
-    // let file = File::open(file_path).unwrap();
     std::fs::read_to_string(file_path)
         .unwrap()
         .trim()

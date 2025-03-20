@@ -28,14 +28,14 @@ fn bench_main(exact: usize) -> Result<(), Box<dyn Error>> {
 
     let _ = fs::create_dir(format!("processed-acc-data/block-{tx_count}txs"));
     let block_path = format!("{data_path}/block-{tx_count}txs/block.txt");
-    println!("Processing block: {}", block_path);
-    println!("Current directory: {:?}", std::env::current_dir()?);
+    // println!("Processing block: {}", block_path);
+    // println!("Current directory: {:?}", std::env::current_dir()?);
 
     // Debug: list acc-data folder contents
-    for entry in fs::read_dir(&data_path)? {
-        let entry = entry?;
-        println!("{}", entry.path().display());
-    }
+    // for entry in fs::read_dir(&data_path)? {
+    //     let entry = entry?;
+    //     println!("{}", entry.path().display());
+    // }
 
     let block: Block =
         consensus::deserialize(&fs::read(&block_path).expect("Failed to read block from disk"))
@@ -43,11 +43,11 @@ fn bench_main(exact: usize) -> Result<(), Box<dyn Error>> {
 
     let height_path = format!("{data_path}/block-{tx_count}txs/block-height.txt");
     let height: u32 = read_height_from_file(&height_path);
-    println!("Calculated height: {}", height);
+    // println!("Calculated height: {}", height);
 
     let acc_before_path = format!("{data_path}/block-{tx_count}txs/acc-before.txt");
     let input_leaf_hashes_path = format!("{data_path}/block-{tx_count}txs/input_leaf_hashes.txt");
-    println!("input_leaf_hashes_path: {}", input_leaf_hashes_path);
+    // println!("input_leaf_hashes_path: {}", input_leaf_hashes_path);
 
     let serialized_acc_before = fs::read(&acc_before_path).unwrap();
     let mut acc_before = Pollard::deserialize(Cursor::new(&serialized_acc_before)).unwrap();
@@ -86,8 +86,9 @@ fn bench_main(exact: usize) -> Result<(), Box<dyn Error>> {
 
 fn bench_main_wrapper(c: &mut criterion::Criterion) {
     let exact_values = [5, 100, 2400];
+    let mut group = c.benchmark_group("input-generator");
     for &val in &exact_values {
-        c.bench_function(&format!("input-generator (exact = {})", val), |b| {
+        group.bench_function(&format!("{}", val), |b| {
             b.iter(|| {
                 bench_main(criterion::black_box(val)).unwrap();
             })
