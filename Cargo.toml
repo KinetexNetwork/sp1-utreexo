@@ -5,11 +5,11 @@ members = [
     "rustreexo",
     "server",
     "input-generator",
-    "circuit/script",
-    "circuit/program/utreexo",
 ]
 
 exclude = [
+    "circuit/script",
+    "circuit/program/utreexo",
     "circuit/script/bin",
 ]
 

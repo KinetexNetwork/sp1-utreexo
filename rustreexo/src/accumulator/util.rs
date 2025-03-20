@@ -308,6 +308,18 @@ pub fn get_proof_positions(targets: &[u64], num_leaves: u64, forest_rows: u8) ->
 
     proof_positions
 }
+
+use bitcoin_hashes::HashEngine;
+use bitcoin_hashes::Sha256 as Data;
+
+pub fn hash_from_u8(value: u8) -> BitcoinNodeHash {
+    let mut engine = Data::engine();
+
+    engine.input(&[value]);
+
+    BitcoinNodeHash::from(Data::from_engine(engine).as_byte_array())
+}
+
 #[cfg(test)]
 pub mod tests {
     use std::str::FromStr;
@@ -317,16 +329,6 @@ pub mod tests {
     use crate::accumulator::node_hash::BitcoinNodeHash;
     use crate::accumulator::util::children;
     use crate::accumulator::util::tree_rows;
-    use bitcoin_hashes::HashEngine;
-    use bitcoin_hashes::Sha256 as Data;
-
-    pub fn hash_from_u8(value: u8) -> BitcoinNodeHash {
-        let mut engine = Data::engine();
-
-        engine.input(&[value]);
-
-        BitcoinNodeHash::from(Data::from_engine(engine).as_byte_array())
-    }
 
     #[test]
     fn test_proof_pos() {

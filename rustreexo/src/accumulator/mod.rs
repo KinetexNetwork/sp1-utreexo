@@ -11,4 +11,4 @@ pub mod node_hash;
 pub mod pollard;
 pub mod proof;
 pub mod stump;
-pub(super) mod util;
+pub mod util;
