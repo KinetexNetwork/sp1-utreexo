@@ -5,12 +5,11 @@ members = [
     "rustreexo",
     "server",
     "input-generator",
-    "circuit/script",
     "circuit/program/utreexo",
 ]
 
 exclude = [
-    "circuit/script/bin",
+    "circuit/script",
 ]
 
 [profile.release]
