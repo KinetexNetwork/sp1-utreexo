@@ -11,13 +11,32 @@ use alloy_sol_types::sol;
 use alloy_sol_types::SolType;
 use bitcoin::Block;
 use bitcoin::TxIn;
+use rustreexo::accumulator::mem_forest::MemForest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
-use rustreexo::accumulator::pollard::Pollard;
+use serde::Deserialize;
 
 mod btc_structs;
 mod process_block;
 
 use crate::process_block::process_block;
+
+fn mem_forest_from_bytes<'de, D>(deserializer: D) -> Result<MemForest<BitcoinNodeHash>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let bytes: Vec<u8> = serde::Deserialize::deserialize(deserializer)?;
+    let cursor = std::io::Cursor::new(bytes);
+    MemForest::<BitcoinNodeHash>::deserialize(cursor).map_err(serde::de::Error::custom)
+}
+
+#[derive(Deserialize)]
+struct AccumulatorInput {
+    block: Block,
+    height: u32,
+    #[serde(deserialize_with = "mem_forest_from_bytes")]
+    mem_forest: MemForest<BitcoinNodeHash>,
+    input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash>,
+}
 
 type PublicValuesTuple = sol! {
     (
@@ -52,7 +71,7 @@ pub fn main() {
 fn read_inputs() -> (
     Block,
     u32,
-    Pollard,
+    MemForest<BitcoinNodeHash>,
     HashMap<TxIn, BitcoinNodeHash>,
 ) {
     use std::io::Read;
@@ -77,21 +96,28 @@ fn read_inputs() -> (
         std::process::exit(1);
     }
 
-    serde_json::from_str(&input_data)
-        .expect("Deserialization failed: Provided input is invalid or cannot be parsed into the required types")
+    let parsed: AccumulatorInput = serde_json::from_str(&input_data)
+        .expect("Deserialization failed: Provided input is invalid or cannot be parsed into the required types");
+
+    (
+        parsed.block,
+        parsed.height,
+        parsed.mem_forest,
+        parsed.input_leaf_hashes,
+    )
 }
 
 #[cfg(not(feature = "native"))]
 fn read_inputs() -> (
     Block,
     u32,
-    Pollard,
+    MemForest<BitcoinNodeHash>,
     HashMap<TxIn, BitcoinNodeHash>,
 ) {
     (
         sp1_zkvm::io::read::<Block>(),
         sp1_zkvm::io::read::<u32>(),
-        sp1_zkvm::io::read::<Pollard>(),
+        sp1_zkvm::io::read::<MemForest<BitcoinNodeHash>>(),
         sp1_zkvm::io::read::<HashMap<TxIn, BitcoinNodeHash>>(),
     )
 }

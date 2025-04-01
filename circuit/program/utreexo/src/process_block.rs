@@ -1,13 +1,21 @@
-use bitcoin::consensus::Encodable;
-use bitcoin::{Block, OutPoint, Transaction, TxIn, Txid};
-use bitcoin_hashes::Hash;
-use rustreexo::accumulator::node_hash::BitcoinNodeHash;
-use rustreexo::accumulator::pollard::Pollard;
 use std::collections::HashMap;
 
-use sha2::{Digest, Sha256};
+use bitcoin::consensus::Encodable;
+use bitcoin::Block;
+use bitcoin::OutPoint;
+use bitcoin::Transaction;
+use bitcoin::TxIn;
+use bitcoin::Txid;
+use bitcoin_hashes::Hash;
+use rustreexo::accumulator::mem_forest::MemForest;
+use rustreexo::accumulator::node_hash::BitcoinNodeHash;
+use rustreexo::accumulator::pollard::Pollard;
+use rustreexo::accumulator::proof::Proof;
+use sha2::Digest;
+use sha2::Sha256;
 
-use crate::btc_structs::{BatchProof, LeafData};
+use crate::btc_structs::BatchProof;
+use crate::btc_structs::LeafData;
 
 fn compute_txid(tx: &Transaction) -> Txid {
     let mut tx_bytes = Vec::new();
@@ -34,7 +42,7 @@ fn compute_txid(tx: &Transaction) -> Txid {
 pub fn process_block(
     block: &Block,
     height: u32,
-    acc: &mut Pollard,
+    acc: &mut MemForest<BitcoinNodeHash>,
     input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash>,
 ) -> BatchProof {
     // Pre-calculate capacity estimates
@@ -44,7 +52,11 @@ pub fn process_block(
         .filter(|tx| !tx.is_coinbase())
         .map(|tx| tx.input.len())
         .sum();
-    let estimated_utxos: usize = block.txdata.iter().map(|tx| tx.output.len()).sum();
+    let estimated_utxos: usize = block
+        .txdata
+        .iter()
+        .map(|tx| tx.output.len())
+        .sum();
     let mut inputs = Vec::with_capacity(estimated_inputs);
     let mut utxos = Vec::with_capacity(estimated_utxos);
 
@@ -56,8 +68,13 @@ pub fn process_block(
 
         for input in tx.input.iter() {
             if !tx.is_coinbase() {
-                let hash = *input_leaf_hashes.get(input).unwrap();
-                if let Some(idx) = utxos.iter().position(|h| *h == hash) {
+                let hash = *input_leaf_hashes
+                    .get(input)
+                    .unwrap();
+                if let Some(idx) = utxos
+                    .iter()
+                    .position(|h| *h == hash)
+                {
                     utxos.swap_remove(idx);
                 } else {
                     inputs.push(hash);
@@ -67,7 +84,10 @@ pub fn process_block(
 
         for (idx, output) in tx.output.iter().enumerate() {
             // TODO: doublecheck if is_op_return is proper method
-            if !output.script_pubkey.is_op_return() {
+            if !output
+                .script_pubkey
+                .is_op_return()
+            {
                 let header_code = if tx.is_coinbase() {
                     (height << 1) | 1
                 } else {
@@ -87,7 +107,8 @@ pub fn process_block(
         }
     }
 
-    acc.modify(&utxos, &inputs).unwrap();
+    acc.modify(&utxos, &inputs)
+        .unwrap();
 
     BatchProof {
         targets: vec![],
