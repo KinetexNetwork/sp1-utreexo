@@ -10,7 +10,9 @@ use anyhow::Result;
 use bitcoin::{blockdata::script::ScriptBuf, Amount, BlockHash, OutPoint, TxOut, Txid};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use duckdb::Connection;
+use humantime::format_duration;
 use log::info;
+use num_format::{Locale, ToFormattedString};
 use rustreexo::accumulator::mem_forest::MemForest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use utreexo::btc_structs::LeafData;
@@ -59,6 +61,8 @@ fn main() -> Result<()> {
     let cookie_file = env::var("BITCOIN_CORE_COOKIE_FILE").expect("…COOKIE_FILE…");
     let rpc = Client::new(&rpc_url, Auth::CookieFile(PathBuf::from(cookie_file)))?;
 
+    info!("Job started");
+
     // fetch all block‐hashes
     let t0 = Instant::now();
     let tip = rpc.get_block_count()? as usize;
@@ -67,9 +71,9 @@ fn main() -> Result<()> {
         block_hashes.push(rpc.get_block_hash(h as u64)?);
     }
     info!(
-        "fetched {} block‐hashes in {:?}",
-        block_hashes.len(),
-        t0.elapsed()
+        "fetched {} block‐hashes in {}",
+        block_hashes.len().to_formatted_string(&Locale::en),
+        format_duration(t0.elapsed())
     );
 
     // open Parquet in memory
@@ -116,15 +120,21 @@ fn main() -> Result<()> {
         }
         forest.modify(&leaves, &[]).unwrap();
         info!(
-            "batch {}: {} leaves in {:?} (offset {})",
-            batch_idx,
-            leaves.len(),
-            t1.elapsed(),
-            offset
+            "batch {}: {} leaves in {} (offset {})",
+            batch_idx.to_formatted_string(&Locale::en),
+            leaves.len().to_formatted_string(&Locale::en),
+            format_duration(t1.elapsed()),
+            offset.to_formatted_string(&Locale::en)
         );
         offset += batch_size;
         batch_idx += 1;
     }
+
+    info!(
+        "Processed {} batches in total for {}",
+        batch_idx.to_formatted_string(&Locale::en),
+        format_duration(t0.elapsed())
+    );
 
     // write out
     dump_block_hashes(&block_hashes, &out_dir.join("block_hashes.bin"))?;
@@ -136,11 +146,9 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::{consensus::Encodable, hashes::Hash};
-    use sha2::Sha512_256;
+    use bitcoin::{hashes::Hash, hex::DisplayHex};
     use std::io::Cursor;
     use tempfile::tempdir;
-    use utreexo::UTREEXO_TAG_V1;
 
     #[test]
     fn sql_builder() {
@@ -206,5 +214,70 @@ mod tests {
         let got1 = leaf1.get_leaf_hashes().to_string();
 
         assert_eq!(got1, EXPECTED_LEAF_HASH);
+    }
+
+    #[test]
+    #[ignore = "requires Bitcoin‑Core RPC + correct env vars"]
+    fn leaf_hash_rpc_consistency() {
+        // constants from your DuckDB row
+        const TXID_HEX: &str = "4814f3bd6ad0f372be1375a2e501914cbab4d2feaefe1d125d91bc3145202a00";
+        const VOUT: u32 = 0;
+        const AMOUNT: u64 = 8662;
+        const HEIGHT: u32 = 699777;
+        const SCRIPT_HEX: &str = "00140000000000e90455a22f968c30feabd2fb4c4958";
+
+        // Connect to core
+        let rpc_url = env::var("BITCOIN_CORE_RPC_URL").unwrap();
+        let cookie = env::var("BITCOIN_CORE_COOKIE_FILE").unwrap();
+        let rpc = Client::new(&rpc_url, Auth::CookieFile(PathBuf::from(cookie))).unwrap();
+
+        // 1) Parquet‐side LeafData (we only know height, so fetch the true block hash here)
+        let block_hash = rpc.get_block_hash(HEIGHT as u64).unwrap();
+        let txid: Txid = TXID_HEX.parse().unwrap();
+        let script1 = ScriptBuf::from_bytes(hex::decode(SCRIPT_HEX).unwrap());
+        let leaf_parquet = LeafData {
+            block_hash,
+            prevout: OutPoint { txid, vout: VOUT },
+            header_code: HEIGHT << 1,
+            utxo: TxOut {
+                value: Amount::from_sat(AMOUNT),
+                script_pubkey: script1.clone(),
+            },
+        };
+        let hash_parquet = leaf_parquet.get_leaf_hashes();
+
+        // 2) RPC‐side LeafData
+        // 2a) verify gettxout
+        let out = rpc
+            .get_tx_out(&txid, VOUT, None)
+            .unwrap()
+            .expect("UTXO must exist");
+        assert_eq!(out.value.to_sat(), AMOUNT);
+        assert_eq!(
+            out.script_pub_key
+                .hex
+                .to_hex_string(bitcoin::hex::Case::Lower),
+            SCRIPT_HEX
+        );
+
+        // 2b) verify raw‐transaction output matches
+        let raw_tx = rpc.get_raw_transaction(&txid, Some(&block_hash)).unwrap();
+        let rpc_utxo = raw_tx.output[VOUT as usize].clone();
+        assert_eq!(rpc_utxo.value.to_sat(), AMOUNT);
+        assert_eq!(rpc_utxo.script_pubkey.to_bytes(), script1.to_bytes());
+
+        let leaf_rpc = LeafData {
+            block_hash,
+            prevout: OutPoint { txid, vout: VOUT },
+            header_code: HEIGHT << 1,
+            utxo: rpc_utxo,
+        };
+        let hash_rpc = leaf_rpc.get_leaf_hashes();
+
+        assert_eq!(
+            hash_parquet, hash_rpc,
+            "Parquet leaf‐hash = {:?}, RPC leaf‐hash = {:?}",
+            hash_parquet, hash_rpc
+        );
     }
 }
