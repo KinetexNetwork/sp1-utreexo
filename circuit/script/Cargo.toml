@@ -29,6 +29,9 @@ duckdb = { version = "0.9", default-features = false }
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 duckdb = { version = "0.9", features = ["bundled"] }
 
+[dev-dependencies]
+tempfile = "3"
+
 [build-dependencies]
 sp1-helper = "4.0.0"
 sp1-build = "4.0.0"

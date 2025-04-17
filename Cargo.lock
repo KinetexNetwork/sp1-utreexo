@@ -2775,6 +2775,7 @@ dependencies = [
  "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "sp1-build",
  "sp1-helper",
+ "tempfile",
  "utreexo",
 ]
 
