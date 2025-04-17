@@ -9,8 +9,6 @@ use bitcoin::Txid;
 use bitcoin_hashes::Hash;
 use rustreexo::accumulator::mem_forest::MemForest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
-use rustreexo::accumulator::pollard::Pollard;
-use rustreexo::accumulator::proof::Proof;
 use sha2::Digest;
 use sha2::Sha256;
 

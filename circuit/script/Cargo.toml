@@ -8,14 +8,26 @@ name = "utreexo"
 path = "src/bin/utreexo.rs"
 
 [dependencies]
-duckdb = "0.9"
+bitcoin = { version = "0.32", features = ["serde"] }
+bitcoincore-rpc = "0.19"
 chrono = "=0.4.39"
-rustreexo = { version = "0.4", features = ["with-serde"] }
-hex = "0.4"
-sha2 = "0.10"
-log = "0.4"
+anyhow = "1.0"
+humantime = "2.1"
 env_logger = "0.10"
+hex = "0.4"
+log = "0.4"
 num-format = "0.4"
+rustreexo = { version = "0.4", features = ["with-serde"] }
+sha2 = "0.10"
+utreexo = { path = "../program/utreexo" }
+
+# on macOS, use the system (Homebrew) duckdb dylib
+[target.'cfg(target_os = "macos")'.dependencies]
+duckdb = { version = "0.9", default-features = false }
+
+# everywhere else (Linux, CI, etc.) build the bundled C++ version
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+duckdb = { version = "0.9", features = ["bundled"] }
 
 [build-dependencies]
 sp1-helper = "4.0.0"

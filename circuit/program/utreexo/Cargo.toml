@@ -1,11 +1,19 @@
 [package]
 version = "0.1.0"
-name = "btcx-program-utreexo"
+name = "utreexo"
 edition = "2021"
+
+[lib]
+name = "utreexo"
+path = "src/lib.rs"
+
+[[bin]]
+name = "utreexo‐program"
+path = "src/main.rs"
 
 [dependencies]
 alloy-sol-types = "0.7.2"
-bitcoin = { git = "https://github.com/KinetexNetwork/rust-bitcoin", branch = "0.32.x", features = ["serde"] }
+bitcoin = { version = "0.32", features = ["serde"] }
 hex = "0.4.3"
 # sp1-zkvm = "4.0.0"
 rustreexo = {version = "0.4", features = ["with-serde"] }

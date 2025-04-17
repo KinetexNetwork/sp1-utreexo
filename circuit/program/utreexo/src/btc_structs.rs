@@ -2,10 +2,15 @@
 // sp1-zkvm. I will be happy to change them to some less hacky approach in the future.
 
 use bitcoin::consensus::Encodable;
-use bitcoin::{BlockHash, OutPoint, TxOut, VarInt};
+use bitcoin::BlockHash;
+use bitcoin::OutPoint;
+use bitcoin::TxOut;
+use bitcoin::VarInt;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha512_256};
+use serde::Deserialize;
+use serde::Serialize;
+use sha2::Digest;
+use sha2::Sha512_256;
 
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub enum ScriptPubkeyType {
@@ -21,7 +26,7 @@ pub enum ScriptPubkeyType {
     WitnessV0ScriptHash,
 }
 
-#[derive(PartialEq, Eq, Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug, Default)]
 pub struct BatchProof {
     /// All targets that'll be deleted
     pub targets: Vec<VarInt>,
@@ -74,13 +79,19 @@ pub const UTREEXO_TAG_V1: [u8; 64] = [
 impl LeafData {
     pub fn get_leaf_hashes(&self) -> BitcoinNodeHash {
         let mut ser_utxo = vec![];
-        let _ = self.utxo.consensus_encode(&mut ser_utxo);
+        let _ = self
+            .utxo
+            .consensus_encode(&mut ser_utxo);
         let leaf_hash = Sha512_256::new()
             .chain_update(UTREEXO_TAG_V1)
             .chain_update(UTREEXO_TAG_V1)
             .chain_update(self.block_hash)
             .chain_update(self.prevout.txid)
-            .chain_update(self.prevout.vout.to_le_bytes())
+            .chain_update(
+                self.prevout
+                    .vout
+                    .to_le_bytes(),
+            )
             .chain_update(self.header_code.to_le_bytes())
             .chain_update(ser_utxo)
             .finalize();
