@@ -136,9 +136,11 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::hashes::Hash;
+    use bitcoin::{consensus::Encodable, hashes::Hash};
+    use sha2::Sha512_256;
     use std::io::Cursor;
     use tempfile::tempdir;
+    use utreexo::UTREEXO_TAG_V1;
 
     #[test]
     fn sql_builder() {
@@ -172,5 +174,37 @@ mod tests {
         let mut cur = Cursor::new(bytes);
         let forest2 = MemForest::<BitcoinNodeHash>::deserialize(&mut cur).unwrap();
         assert_eq!(forest.get_roots().len(), forest2.get_roots().len());
+    }
+
+    #[test]
+    fn get_leaf_hashes_matches_manual() {
+        // These values come from “extract_from_parquet.sh” or “extract_from_block.sh”
+        const TXID_HEX: &str = "4814f3bd6ad0f372be1375a2e501914cbab4d2feaefe1d125d91bc3145202a00";
+        const VOUT: u32 = 0;
+        const AMOUNT: u64 = 8662; // in sats
+        const HEIGHT: u32 = 699777;
+        const BLOCK_HASH_HEX: &str =
+            "0000000000000000000a8edc1b8a0e5f5a0b8a0e5f5a0b8a0e5f5a0b8a0e5f5a"; // 32‑byte LE hex
+        const SCRIPT_HEX: &str = "00140000000000e90455a22f968c30feabd2fb4c4958";
+        const EXPECTED_LEAF_HASH: &str =
+            "d7565793d4552d28753064a2a0ffbf15f03721e5effb0789ae6f7e409f706276";
+
+        // from parquet‐row path
+        let block_hash: BlockHash = BLOCK_HASH_HEX.parse().unwrap();
+        let txid: Txid = TXID_HEX.parse().unwrap();
+        let script_pubkey = ScriptBuf::from_bytes(hex::decode(SCRIPT_HEX).unwrap());
+        let leaf1 = LeafData {
+            block_hash,
+            prevout: OutPoint { txid, vout: VOUT },
+            header_code: HEIGHT << 1,
+            utxo: TxOut {
+                value: Amount::from_sat(AMOUNT),
+                script_pubkey,
+            },
+        };
+
+        let got1 = leaf1.get_leaf_hashes().to_string();
+
+        assert_eq!(got1, EXPECTED_LEAF_HASH);
     }
 }
