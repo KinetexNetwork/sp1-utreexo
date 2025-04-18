@@ -1,347 +1,283 @@
-use alloy_sol_types::{sol, SolType};
-use bitcoin::consensus::Encodable;
-use bitcoin::Block;
-use bitcoin::TxIn;
-use clap::Parser;
-use regex::Regex;
-use rustreexo::accumulator::node_hash::BitcoinNodeHash;
-use rustreexo::accumulator::pollard::Pollard;
-use serde::{Deserialize, Serialize};
-use sp1_sdk::{utils, ProverClient, SP1Stdin};
-use std::collections::HashMap;
-use std::error::Error;
-use std::fs::{self, File};
-use std::io;
-use std::io::BufReader;
-use std::io::Cursor;
-use std::ops::Deref;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use threadpool::ThreadPool;
-
-type PublicValuesTuple = sol! {
-    (
-        bytes, // acc roots
-    )
+use std::{
+    env,
+    fs::{create_dir_all, File},
+    io::Write,
+    path::{Path, PathBuf},
+    time::Instant,
 };
 
-/// The arguments for the command.
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-struct Args {
-    #[clap(long)]
-    execute: bool,
+use anyhow::Result;
+use bitcoin::{blockdata::script::ScriptBuf, Amount, BlockHash, OutPoint, TxOut, Txid};
+use bitcoincore_rpc::{Auth, Client, RpcApi};
+use duckdb::Connection;
+use humantime::format_duration;
+use log::info;
+use num_format::{Locale, ToFormattedString};
+use rustreexo::accumulator::mem_forest::MemForest;
+use rustreexo::accumulator::node_hash::BitcoinNodeHash;
+use utreexo::btc_structs::LeafData;
 
-    #[clap(long)]
-    prove: bool,
-
-    #[clap(long, default_value = "20")]
-    n: u32,
-
-    #[clap(long)]
-    exact: Option<u64>,
+/// build the SQL we use for ONE batch
+fn build_sql_query(parquet: &str, limit: usize, offset: usize) -> String {
+    format!(
+        "SELECT txid, amount, vout, height, script \
+         FROM '{}' \
+         WHERE coinbase = FALSE \
+         LIMIT {} OFFSET {}",
+        parquet, limit, offset
+    )
 }
 
-#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
-pub struct CompactLeafData {
-    /// Header code tells the height of creating for this UTXO and whether it's a coinbase
-    pub header_code: u32,
-    /// The amount locked in this UTXO
-    pub amount: u64,
-    /// The type of the locking script for this UTXO
-    pub spk_ty: ScriptPubkeyType,
-}
-
-#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
-pub enum ScriptPubkeyType {
-    /// An non-specified type, in this case the script is just copied over
-    Other(Box<[u8]>),
-    /// p2pkh
-    PubKeyHash,
-    /// p2wsh
-    WitnessV0PubKeyHash,
-    /// p2sh
-    ScriptHash,
-    /// p2wsh
-    WitnessV0ScriptHash,
-}
-
-async fn get_block(height: u32) -> Result<Block, Box<dyn Error>> {
-    // Step 1: Get the block hash for the given height
-    let block_hash_url = format!("https://blockstream.info/api/block-height/{}", height);
-    let block_hash_response = reqwest::get(&block_hash_url).await?;
-    let block_hash = block_hash_response.text().await?;
-
-    let raw_block_url = format!(
-        "https://blockstream.info/api/block/{}/raw",
-        block_hash.trim()
-    );
-    let raw_block_response = reqwest::get(&raw_block_url).await?;
-    let raw_block_bytes = raw_block_response.bytes().await?;
-
-    // Step 3: Deserialize the raw block data into a Block struct
-    let block: Block = bitcoin::consensus::deserialize(&raw_block_bytes).unwrap();
-    Ok(block)
-}
-
-fn get_output_bytes(path: &str) -> Vec<u8> {
-    let acc_file = File::open(path).unwrap();
-    let acc_after = Pollard::deserialize(acc_file).unwrap();
-
-    println!(
-        "acc after roots len = {}, path = {}",
-        acc_after.get_roots().len(),
-        path
-    );
-    let acc_roots: Vec<BitcoinNodeHash> = acc_after
-        .get_roots()
-        .to_vec()
-        .iter()
-        .map(|rc| rc.get_data())
-        .collect();
-    let acc_roots_bytes: Vec<[u8; 32]> = acc_roots.iter().map(|hash| *hash.deref()).collect();
-    let acc_roots_bytes_flat: Vec<u8> = acc_roots_bytes.concat();
-    PublicValuesTuple::abi_encode(&(acc_roots_bytes_flat,))
-}
-
-fn get_input_leaf_hashes(file_path: &str) -> HashMap<TxIn, BitcoinNodeHash> {
-    println!("Reading input leaf hashes from {}", file_path);
-    let file = File::open(file_path).unwrap();
-    let reader = BufReader::new(file);
-    let deserialized_struct: Vec<(TxIn, BitcoinNodeHash)> =
-        serde_json::from_reader(reader).unwrap();
-    deserialized_struct.into_iter().collect()
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-struct Metrics {
-    pub prove_duration: Duration,
-    pub acc_size: u64,
-    pub block_size: u64,
-    pub block_height: u64,
-    pub tx_count: u64,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-struct MetricsCycles {
-    pub total_instructions: u64,
-    pub acc_size: u64,
-    pub block_size: u64,
-    pub block_height: u64,
-    pub tx_count: u64,
-}
-
-fn get_block_heights(data_path: &str) -> Result<Vec<u64>, Box<dyn Error>> {
-    let mut heights = Vec::new();
-    let re = Regex::new(r"^block-(\d+)txs$").unwrap();
-
-    for entry in fs::read_dir(data_path)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        if let Some((folder_name, num_match)) = (if path.is_dir() {
-            path.file_name().and_then(|n| n.to_str())
-        } else {
-            None
-        })
-        .and_then(|s| {
-            re.captures(s)
-                .and_then(|caps| caps.get(1).map(|num_match| (s, num_match)))
-        }) {
-            match num_match.as_str().parse::<u64>() {
-                Ok(height) => heights.push(height),
-                Err(_) => eprintln!("Warning: Couldn't parse height from '{}'", folder_name),
-            }
-        }
+/// Dump all block‐hashes to `path` as 32‐byte LE‐concatenated blobs
+fn dump_block_hashes(hashes: &[BlockHash], path: &Path) -> Result<()> {
+    let mut flat = Vec::with_capacity(hashes.len() * 32);
+    for h in hashes {
+        flat.extend_from_slice(h.as_ref());
     }
-
-    Ok(heights)
-}
-
-fn read_height_from_file(file_path: &str) -> u32 {
-    std::fs::read_to_string(file_path)
-        .unwrap()
-        .trim()
-        .parse()
-        .unwrap()
-}
-
-fn load_elf<P: AsRef<Path>>(path: P) -> io::Result<&'static [u8]> {
-    let bytes = fs::read(path)?;
-    Ok(Box::leak(bytes.into_boxed_slice()))
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let cargo_root = env!("CARGO_MANIFEST_DIR");
-    utils::setup_logger();
-    let args = Args::parse();
-    if args.execute == args.prove {
-        eprintln!("Error: You must specify either --execute or --prove");
-        std::process::exit(1);
-    }
-
-    let relative_elf_path =
-        "../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/btcx-program-utreexo";
-    let elf_path = Path::new(&cargo_root).join(relative_elf_path);
-
-    let elf = load_elf(dbg!(elf_path)).unwrap();
-
-    // some = "sdf";
-
-    let mut available_tx_counts = get_block_heights(&format!("{cargo_root}/../acc-data/")).unwrap();
-    available_tx_counts.sort();
-    if let Some(exact) = args.exact {
-        available_tx_counts = vec![exact];
-    }
-
-    if args.execute {
-        // TODO: Make it DRY
-        for tx_count in available_tx_counts {
-            let block_path = format!("{cargo_root}/../acc-data/block-{tx_count}txs/block.txt");
-            let block: Block =
-                bitcoin::consensus::deserialize(&fs::read(&block_path).unwrap()).unwrap();
-
-            let height_path =
-                format!("{cargo_root}/../acc-data/block-{tx_count}txs/block-height.txt");
-            let height: u32 = read_height_from_file(&height_path);
-
-            println!("Calculated height: {height}");
-            let acc_before_path =
-                format!("{cargo_root}/../acc-data/block-{tx_count}txs/acc-before.txt");
-            let acc_after_path =
-                format!("{cargo_root}/../acc-data/block-{tx_count}txs/acc-after.txt");
-            let input_leaf_hashes_path =
-                format!("{cargo_root}/../acc-data/block-{tx_count}txs/input_leaf_hashes.txt");
-
-            let serialized_acc_before = fs::read(&acc_before_path).unwrap();
-            let acc_before = Pollard::deserialize(Cursor::new(&serialized_acc_before)).unwrap();
-
-            println!(
-                "acc before roots len = {}, acc before leaves len = {}",
-                acc_before.get_roots().len(),
-                acc_before.leaves
-            );
-
-            let input_leaf_hashes: HashMap<TxIn, BitcoinNodeHash> =
-                get_input_leaf_hashes(&input_leaf_hashes_path);
-
-            let mut stdin = SP1Stdin::new();
-            stdin.write::<Block>(&block);
-            stdin.write::<u32>(&height);
-            stdin.write::<Pollard>(&acc_before);
-            stdin.write::<HashMap<TxIn, BitcoinNodeHash>>(&input_leaf_hashes);
-
-            let client = ProverClient::from_env();
-            let public_values = client.execute(elf, &stdin).run().unwrap();
-            let actual_bytes = public_values.0.as_slice();
-            let expected_bytes = get_output_bytes(&acc_after_path);
-            let unexpected_bytes = get_output_bytes(&acc_before_path);
-
-            assert_ne!(actual_bytes, unexpected_bytes);
-            assert_eq!(actual_bytes, expected_bytes);
-            println!("Successfully executed. Generating report.");
-
-            let cycles = public_values.1.total_instruction_count();
-            let acc_size = fs::File::open(&acc_before_path)
-                .unwrap()
-                .metadata()
-                .unwrap()
-                .len();
-            let mut block_str: Vec<u8> = Default::default();
-            let fetched_block = get_block(height).await?;
-            let _ = fetched_block.consensus_encode(&mut block_str).unwrap();
-            let block_size = block_str.len();
-
-            let metrics = MetricsCycles {
-                total_instructions: cycles,
-                acc_size,
-                block_size: block_size as u64,
-                block_height: height as u64,
-                tx_count,
-            };
-
-            let file = File::create(format!("{cargo_root}/../metrics/{tx_count}.json"))?;
-            serde_json::to_writer_pretty(file, &metrics)?;
-            println!("Report saved to {cargo_root}/../metrics/{tx_count}.json");
-        }
-    } else {
-        let num_workers = available_tx_counts.len().max(1);
-        let pool = ThreadPool::new(num_workers);
-
-        for tx_count in available_tx_counts {
-            let cargo_root = cargo_root.to_string();
-            pool.execute(move || {
-                let block_path = format!("{cargo_root}/../acc-data/block-{tx_count}txs/block.txt");
-                let block =
-                    bitcoin::consensus::deserialize(&fs::read(&block_path).unwrap()).unwrap();
-
-                let height_path =
-                    format!("{cargo_root}/../acc-data/block-{tx_count}txs/block-height.txt");
-                let height: u32 = read_height_from_file(&height_path);
-                println!("Calculated height: {}", height);
-
-                let acc_before_path =
-                    format!("{cargo_root}/../acc-data/block-{tx_count}txs/acc-before.txt");
-                let input_leaf_hashes_path =
-                    format!("{cargo_root}/../acc-data/block-{tx_count}txs/input_leaf_hashes.txt");
-
-                let serialized_acc_before = fs::read(&acc_before_path).unwrap();
-                let acc_before = Pollard::deserialize(Cursor::new(&serialized_acc_before)).unwrap();
-
-                println!(
-                    "acc before roots len = {}, acc before leaves len = {}",
-                    acc_before.get_roots().len(),
-                    acc_before.leaves
-                );
-
-                let input_leaf_hashes = get_input_leaf_hashes(&input_leaf_hashes_path);
-                let mut stdin = SP1Stdin::new();
-                stdin.write::<Block>(&block);
-                stdin.write::<u32>(&height);
-                stdin.write::<Pollard>(&acc_before);
-                stdin.write::<HashMap<TxIn, BitcoinNodeHash>>(&input_leaf_hashes);
-
-                let client = Arc::new(ProverClient::from_env());
-                let (pk, vk) = client.setup(elf);
-                let start = Instant::now();
-                let proof = client
-                    .prove(&pk, &stdin)
-                    .run()
-                    .expect("failed to generate proof");
-                let duration = start.elapsed();
-
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                let acc_size = fs::File::open(&acc_before_path)
-                    .unwrap()
-                    .metadata()
-                    .unwrap()
-                    .len();
-                let mut block_str: Vec<u8> = Default::default();
-                let fetched_block = rt.block_on(get_block(height)).unwrap();
-                let _ = fetched_block.consensus_encode(&mut block_str).unwrap();
-                let block_size = block_str.len();
-
-                let metrics = Metrics {
-                    prove_duration: duration,
-                    acc_size,
-                    block_size: block_size as u64,
-                    block_height: height as u64,
-                    tx_count,
-                };
-
-                let metrics_path = format!("{cargo_root}/../metrics/{tx_count}.json");
-                let file = File::create(&metrics_path).unwrap();
-                serde_json::to_writer_pretty(file, &metrics).unwrap();
-
-                println!("Successfully generated proof for tx_count: {}!", tx_count);
-                client.verify(&proof, &vk).expect("failed to verify proof");
-                println!("Successfully verified proof for tx_count: {}!", tx_count);
-            });
-        }
-
-        pool.join();
-    }
+    let mut f = File::create(path)?;
+    f.write_all(&flat)?;
     Ok(())
+}
+
+/// Serialize the accumulator out to a file
+fn dump_mem_forest(forest: &MemForest<BitcoinNodeHash>, path: &Path) -> Result<()> {
+    let mut f = File::create(path)?;
+    forest.serialize(&mut f)?;
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    env_logger::init();
+
+    // args
+    let parquet = env::args()
+        .nth(1)
+        .expect("Usage: utreexo <utxo.parquet> <out_dir>");
+    let out_dir = PathBuf::from(env::args().nth(2).unwrap());
+    create_dir_all(&out_dir)?;
+
+    // RPC client
+    let rpc_url = env::var("BITCOIN_CORE_RPC_URL").expect("…RPC_URL…");
+    let cookie_file = env::var("BITCOIN_CORE_COOKIE_FILE").expect("…COOKIE_FILE…");
+    let rpc = Client::new(&rpc_url, Auth::CookieFile(PathBuf::from(cookie_file)))?;
+
+    info!("Job started");
+
+    // fetch all block‐hashes
+    let t0 = Instant::now();
+    let tip = rpc.get_block_count()? as usize;
+    let mut block_hashes = Vec::with_capacity(tip + 1);
+    for h in 0..=tip {
+        block_hashes.push(rpc.get_block_hash(h as u64)?);
+    }
+    info!(
+        "fetched {} block‐hashes in {}",
+        block_hashes.len().to_formatted_string(&Locale::en),
+        format_duration(t0.elapsed())
+    );
+
+    // open Parquet in memory
+    let conn = Connection::open(":memory:")?;
+    let batch_size = 50_000;
+    let mut offset = 0;
+    let mut forest = MemForest::<BitcoinNodeHash>::new();
+    let mut batch_idx = 0;
+
+    loop {
+        let t1 = Instant::now();
+        let sql = build_sql_query(&parquet, batch_size, offset);
+        let mut stmt = conn.prepare(&sql)?;
+        let mut leaves = Vec::with_capacity(batch_size);
+
+        for row in stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, u64>(1)?,
+                r.get::<_, u32>(2)?,
+                r.get::<_, u64>(3)?,
+                r.get::<_, Vec<u8>>(4)?,
+            ))
+        })? {
+            let (txid_hex, sats, vout, height, script_bytes) = row?;
+            let txid: Txid = txid_hex.parse()?;
+            let block_hash = block_hashes[height as usize];
+            let script_pubkey = ScriptBuf::from_bytes(script_bytes);
+            let header_code = (height as u32) << 1;
+            let txout = TxOut {
+                value: Amount::from_sat(sats),
+                script_pubkey,
+            };
+            let leaf = LeafData {
+                block_hash,
+                prevout: OutPoint { txid, vout },
+                header_code,
+                utxo: txout,
+            };
+            leaves.push(leaf.get_leaf_hashes());
+        }
+        if leaves.is_empty() {
+            break;
+        }
+        forest.modify(&leaves, &[]).unwrap();
+        info!(
+            "batch {}: {} leaves in {} (offset {})",
+            batch_idx.to_formatted_string(&Locale::en),
+            leaves.len().to_formatted_string(&Locale::en),
+            format_duration(t1.elapsed()),
+            offset.to_formatted_string(&Locale::en)
+        );
+        offset += batch_size;
+        batch_idx += 1;
+    }
+
+    info!(
+        "Processed {} batches in total for {}",
+        batch_idx.to_formatted_string(&Locale::en),
+        format_duration(t0.elapsed())
+    );
+
+    // write out
+    dump_block_hashes(&block_hashes, &out_dir.join("block_hashes.bin"))?;
+    dump_mem_forest(&forest, &out_dir.join("mem_forest.bin"))?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitcoin::{hashes::Hash, hex::DisplayHex};
+    use std::io::Cursor;
+    use tempfile::tempdir;
+
+    #[test]
+    fn sql_builder() {
+        let got = build_sql_query("foo.parquet", 123, 456);
+        let want = "SELECT txid, amount, vout, height, script FROM 'foo.parquet' \
+                    WHERE coinbase = FALSE \
+                    LIMIT 123 OFFSET 456";
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn dump_block_hashes_roundtrip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("blocks.bin");
+        let h1 = BlockHash::from_slice(&[1u8; 32]).unwrap();
+        let h2 = BlockHash::from_slice(&[2u8; 32]).unwrap();
+        dump_block_hashes(&[h1, h2], &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        assert_eq!(&data[0..32], &[1u8; 32]);
+        assert_eq!(&data[32..64], &[2u8; 32]);
+    }
+
+    #[test]
+    fn dump_mem_forest_roundtrip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("forest.bin");
+        let forest = MemForest::<BitcoinNodeHash>::new();
+        // empty forest → serialize/deserialize
+        dump_mem_forest(&forest, &path).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        let mut cur = Cursor::new(bytes);
+        let forest2 = MemForest::<BitcoinNodeHash>::deserialize(&mut cur).unwrap();
+        assert_eq!(forest.get_roots().len(), forest2.get_roots().len());
+    }
+
+    #[test]
+    fn get_leaf_hashes_matches_manual() {
+        // These values come from “extract_from_parquet.sh” or “extract_from_block.sh”
+        const TXID_HEX: &str = "4814f3bd6ad0f372be1375a2e501914cbab4d2feaefe1d125d91bc3145202a00";
+        const VOUT: u32 = 0;
+        const AMOUNT: u64 = 8662; // in sats
+        const HEIGHT: u32 = 699777;
+        const BLOCK_HASH_HEX: &str =
+            "0000000000000000000a8edc1b8a0e5f5a0b8a0e5f5a0b8a0e5f5a0b8a0e5f5a"; // 32‑byte LE hex
+        const SCRIPT_HEX: &str = "00140000000000e90455a22f968c30feabd2fb4c4958";
+        const EXPECTED_LEAF_HASH: &str =
+            "d7565793d4552d28753064a2a0ffbf15f03721e5effb0789ae6f7e409f706276";
+
+        // from parquet‐row path
+        let block_hash: BlockHash = BLOCK_HASH_HEX.parse().unwrap();
+        let txid: Txid = TXID_HEX.parse().unwrap();
+        let script_pubkey = ScriptBuf::from_bytes(hex::decode(SCRIPT_HEX).unwrap());
+        let leaf1 = LeafData {
+            block_hash,
+            prevout: OutPoint { txid, vout: VOUT },
+            header_code: HEIGHT << 1,
+            utxo: TxOut {
+                value: Amount::from_sat(AMOUNT),
+                script_pubkey,
+            },
+        };
+
+        let got1 = leaf1.get_leaf_hashes().to_string();
+
+        assert_eq!(got1, EXPECTED_LEAF_HASH);
+    }
+
+    #[test]
+    #[ignore = "requires Bitcoin‑Core RPC + correct env vars"]
+    fn leaf_hash_rpc_consistency() {
+        // constants from your DuckDB row
+        const TXID_HEX: &str = "4814f3bd6ad0f372be1375a2e501914cbab4d2feaefe1d125d91bc3145202a00";
+        const VOUT: u32 = 0;
+        const AMOUNT: u64 = 8662;
+        const HEIGHT: u32 = 699777;
+        const SCRIPT_HEX: &str = "00140000000000e90455a22f968c30feabd2fb4c4958";
+
+        // Connect to core
+        let rpc_url = env::var("BITCOIN_CORE_RPC_URL").unwrap();
+        let cookie = env::var("BITCOIN_CORE_COOKIE_FILE").unwrap();
+        let rpc = Client::new(&rpc_url, Auth::CookieFile(PathBuf::from(cookie))).unwrap();
+
+        // 1) Parquet‐side LeafData (we only know height, so fetch the true block hash here)
+        let block_hash = rpc.get_block_hash(HEIGHT as u64).unwrap();
+        let txid: Txid = TXID_HEX.parse().unwrap();
+        let script1 = ScriptBuf::from_bytes(hex::decode(SCRIPT_HEX).unwrap());
+        let leaf_parquet = LeafData {
+            block_hash,
+            prevout: OutPoint { txid, vout: VOUT },
+            header_code: HEIGHT << 1,
+            utxo: TxOut {
+                value: Amount::from_sat(AMOUNT),
+                script_pubkey: script1.clone(),
+            },
+        };
+        let hash_parquet = leaf_parquet.get_leaf_hashes();
+
+        // 2) RPC‐side LeafData
+        // 2a) verify gettxout
+        let out = rpc
+            .get_tx_out(&txid, VOUT, None)
+            .unwrap()
+            .expect("UTXO must exist");
+        assert_eq!(out.value.to_sat(), AMOUNT);
+        assert_eq!(
+            out.script_pub_key
+                .hex
+                .to_hex_string(bitcoin::hex::Case::Lower),
+            SCRIPT_HEX
+        );
+
+        // 2b) verify raw‐transaction output matches
+        let raw_tx = rpc.get_raw_transaction(&txid, Some(&block_hash)).unwrap();
+        let rpc_utxo = raw_tx.output[VOUT as usize].clone();
+        assert_eq!(rpc_utxo.value.to_sat(), AMOUNT);
+        assert_eq!(rpc_utxo.script_pubkey.to_bytes(), script1.to_bytes());
+
+        let leaf_rpc = LeafData {
+            block_hash,
+            prevout: OutPoint { txid, vout: VOUT },
+            header_code: HEIGHT << 1,
+            utxo: rpc_utxo,
+        };
+        let hash_rpc = leaf_rpc.get_leaf_hashes();
+
+        assert_eq!(
+            hash_parquet, hash_rpc,
+            "Parquet leaf‐hash = {:?}, RPC leaf‐hash = {:?}",
+            hash_parquet, hash_rpc
+        );
+    }
 }
