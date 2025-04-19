@@ -8,7 +8,7 @@ name = "utreexo"
 path = "src/lib.rs"
 
 [[bin]]
-name = "utreexo‐program"
+name = "utreexo-program"
 path = "src/main.rs"
 
 [dependencies]

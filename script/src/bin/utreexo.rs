@@ -15,7 +15,7 @@ use log::info;
 use num_format::{Locale, ToFormattedString};
 use rustreexo::accumulator::mem_forest::MemForest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
-use utreexo::btc_structs::LeafData;
+use utreexo::LeafData;
 
 /// build the SQL we use for ONE batch
 fn build_sql_query(parquet: &str, limit: usize, offset: usize) -> String {

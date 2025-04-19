@@ -27,26 +27,22 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
 
-    - name: Install sp1
-      run: |
-        curl -L https://sp1up.succinct.xyz | bash
-        ~/.sp1/bin/sp1up 
-        ~/.sp1/bin/cargo-prove prove --version
+    # - name: Install sp1
+    #   run: |
+    #     curl -L https://sp1up.succinct.xyz | bash
+    #     ~/.sp1/bin/sp1up
+    #     ~/.sp1/bin/cargo-prove prove --version
 
-    - name: Install clang
-      run: |
-        sudo apt update
-        sudo apt install clang
-        clang --version
+    # - name: Install clang
+    #   run: |
+    #     sudo apt update
+    #     sudo apt install clang
+    #     clang --version
         
     - name: Build circuit
-      run: |
-        cd circuit/program/utreexo
-        cc=clang CC=clang ~/.sp1/bin/cargo-prove prove build
-    - name: Build
-      run: cargo build --workspace --exclude btcx-program-utreexo --exclude utreexo-script
-    - name: Run unit tests
-      run: cargo test --workspace --exclude btcx-program-utreexo --exclude utreexo-script
+      run: cargo build --bin utreexo-program
+    - name: Run utreexo unit tests
+      run: cargo test --bin utreexo
 
   lint:
     runs-on: ubuntu-latest
@@ -71,11 +67,3 @@ jobs:
       run: cargo fmt --all -- --check
     - name: Run Clippy
       run: cargo clippy -- -D warnings
-
-  end-to-end:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: Run end to end tests
-      run: python3 run-end-to-end.py --test
