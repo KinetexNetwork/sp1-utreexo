@@ -1,63 +1,98 @@
-# sp1-utreexo
+# sp1‑utreexo
 
-This project aims to implement SP-1 powered zk-circuit for updating a utreexo accumulator. Currently, the project have the following components:
+_WIP: SP‑1 powered zk‑circuit for updating a Utreexo accumulator on Bitcoin._
 
-- `circuit` - zk-circuit for updating a utreexo accumulator.
-- `server` - a bitcoin bridge node, which fetches block data from a bitcoin node for further passage it into the circuit.
-- `rustreexo` - a rust implementation of utreexo accumulator with some zk-friendly modifications.
-- `input-generator` - a tool to take fetched data from the `server` and prepare it for the `circuit`.
+This repo currently has two crates:
 
-## Status
+1. **script/** — takes a Parquet UTXO dump + block‑hashes and builds your initial accumulator state  
+2. **utreexo/** — native Rust runner for accumulator updates (circuit wiring not hooked up yet)
 
-Project is WIP and here is the list of things we already have:
-
-- [x] we already have a zk-circuit for updating a utreexo accumulator
-- [x] we have a server which fetches block data from a bitcoin node and updates utreexo outside circuit
-- [x] we have code to prepare data for the circuit
-- [x] we implemented some robust performance optimizations for circuit
-
-TODO:
-- [ ] To make the program under `program/utreexo/src` runnable on native devices (for profiling purposes).
-- [ ] To bring back the borrowing checker available within the program's crate.
-- [ ] integrate circuit with the server
-- [ ] add endpoints to server for getting utreexo proofs and utreexo roots for given height
+---
 
 ## Prerequisites
 
-1. Install sp1 riscv32 toolchain: `sp1up --c-toolchain` -- it installs toolchain without includes of riscv32 which is necessary for make the project compiles.
-2. Install riscv toolchain on your system: `brew tap riscv-software-src/riscv && brew install riscv-gnu-toolchain`
-3. Export headers into terminal session: `export SP1_CFLAGS="-I$(brew --prefix riscv-gnu-toolchain)/riscv64-unknown-elf/include"`
-4. (Optional) Export riscv32 compiler into terminal session: `export CC_riscv32im_succinct_zkvm_elf=~/.sp1/bin/riscv32-unknown-elf-gcc`
+0. **Bitcoin Core** (v0.21+), fully synced  
+   ```bash
+   brew install bitcoin
+   ```  
+   Edit `$HOME/.bitcoin/bitcoin.conf`:
+   ```
+   server=1
+   txindex=1
+   rpcuser=<USER>
+   rpcpassword=<PASS>
+   ```  
+   Start and sync:
+   ```bash
+   bitcoind -daemon
+   ```
 
-## How to run
+1. **utxo‑to‑parquet** (dump → Parquet converter)  
+   ```bash
+   git clone https://github.com/romanz/utxo-to-parquet.git $HOME/utxo-to-parquet
+   cd $HOME/utxo-to-parquet
+   cargo build --release
+   ```
 
-From very high level there are two steps:
-- run `server` following server/README.md and wait it to start processing blocks (it should be around a minute)
-- run `python3 run-end-to-end.py` from the root of the project
+2. **RPC credentials**  
+   ```bash
+   export BITCOIN_CORE_RPC_URL="http://127.0.0.1:8332"
+   export BITCOIN_CORE_COOKIE_FILE="$HOME/.bitcoin/.cookie"
+   ```
 
-Run with profiling:
+---
+
+## Quick Start
+
+Assume you clone the repo to `$HOME/Development/git/sp1-utreexo`:
+
 ```bash
-CFLAGS=$SP1_CFLAGS TRACE_FILE=output.json TRACE_SAMPLE_RATE=100 cargo run --release --bin utreexo -- --execute --exact 5
+export REPO_ROOT="$HOME/Development/git/sp1-utreexo"
+cd "$REPO_ROOT"
 ```
 
-Building circuit:
-```bash
-CFLAGS=$SP1_CFLAGS cargo prove build
-```
+1) **Build**  
+   ```bash
+   cargo build --all --release
+   ```
 
-Run circuit without generating proof with checking that utreexo roots computed in circuit and out of circuit match:
+2) **Dump & convert the UTXO set**  
+   ```bash
+   bitcoin-cli dumptxoutset $HOME/utxo.dump
 
-```bash
-CFLAGS=$SP1_CFLAGS cargo run --release --bin utreexo -- --execute --exact 5
-```
+   $HOME/utxo-to-parquet/target/release/utxo-to-parquet \
+     -i $HOME/utxo.dump \
+     -o $HOME/utxo.parquet
+   ```
 
-Run with generating proof:
+3) **Generate the initial accumulator state**  
+   ```bash
+   cd "$REPO_ROOT/script"
+   cargo run --release -- $HOME/utxo.parquet $HOME/acc-out
+   ```
+   This will write:
+   - `$HOME/acc-out/block_hashes.bin`  
+   - `$HOME/acc-out/mem_forest.bin`  
 
-```bash
-SP1_PROVER=network NETWORK_PRIVATE_KEY=$NETWORK_PRIVATE_KEY cargo r --release --bin utreexo -- --prove --exact 5
-```
+4) **(Optional) Test a block update with the native runner**  
+   Prepare a JSON file `input.json` matching the `AccumulatorInput` struct:
+   ```json
+   {
+     "block":   <bitcoin::Block as JSON>,
+     "height":  <u32>,
+     "mem_forest": <Vec<u8> contents of mem_forest.bin>,
+     "input_leaf_hashes": { "<TxIn JSON>": "<leaf‑hash hex>", … }
+   }
+   ```
+   Then:
+   ```bash
+   cd "$REPO_ROOT/utreexo"
+   cat input.json \
+     | cargo run --release --features native \
+     > roots.bin
+   ```
+   `roots.bin` will contain the updated accumulator roots as flat 32‑byte hashes.
 
-## Aknowledgements
-`server` and `rustreexo` are based on the work of Davidson-Souza and mit-dci:
-https://github.com/mit-dci/rustreexo
-https://github.com/Davidson-Souza/rpc-utreexo-bridge
+---
+
+_Circuit wiring and on‑chain verification live in `utreexo/` but aren’t hooked up yet. Stay tuned!_```
