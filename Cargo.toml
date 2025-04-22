@@ -2,14 +2,8 @@
 resolver = "2"
 
 members = [
-    "rustreexo",
-    "server",
-    "input-generator",
-    "circuit/program/utreexo",
-]
-
-exclude = [
-    "circuit/script",
+    "script",
+    "utreexo",
 ]
 
 [profile.release]
