@@ -7,9 +7,18 @@ edition = "2021"
 name = "utreexo"
 path = "src/bin/utreexo.rs"
 
+[[example]]
+name = "mem_forest_to_pollard"
+path = "../examples/mem_forest_to_pollard.rs"
+
+[[example]]
+name = "get_block_inputs"
+path = "../examples/get_block_inputs.rs"
+
 [dependencies]
 bitcoin = { version = "0.32", features = ["serde"] }
 bitcoincore-rpc = "0.19"
+serde_json = "1.0.81"
 chrono = "=0.4.39"
 anyhow = "1.0"
 humantime = "2.1"
