@@ -18,6 +18,8 @@
 //      target leaves
 //   6. prints a few basic statistics
 
+use env_logger;
+use log::{debug, info, warn};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::str::FromStr;
@@ -27,6 +29,9 @@ use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // initialize logger
+    env_logger::init();
+
     // ---------------------------------------------------------------------
     // Parse command-line arguments
     // ---------------------------------------------------------------------
@@ -41,6 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ---------------------------------------------------------------------
     // 1. Read & deserialize the MemForest
     // ---------------------------------------------------------------------
+    info!("Reading serialized MemForest from {}", forest_path);
     let mut forest_bytes = Vec::new();
     File::open(&forest_path)?.read_to_end(&mut forest_bytes)?;
     let mut cursor = std::io::Cursor::new(forest_bytes);
@@ -49,6 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ---------------------------------------------------------------------
     // 2. Read the list of leaf hashes we want to delete / track
     // ---------------------------------------------------------------------
+    info!("Reading input leaf hashes from {}", inputs_path);
     let reader = BufReader::new(File::open(&inputs_path)?);
     let mut del_hashes = Vec::new();
     for line in reader.lines() {
@@ -62,20 +69,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if del_hashes.is_empty() {
-        eprintln!("Warning: no hashes found in inputs file");
+        warn!("No hashes found in inputs file {}", inputs_path);
+    } else {
+        info!("Loaded {} leaf hashes to delete", del_hashes.len());
+        debug!(
+            "First delete hashes: {:?}",
+            del_hashes
+                .iter()
+                .take(10)
+                .map(|h| h.to_string())
+                .collect::<Vec<_>>()
+        );
     }
 
     // ---------------------------------------------------------------------
     // 3. Obtain the proof for those leaves from the full forest
     // ---------------------------------------------------------------------
+    info!("Building proof for {} leaf(s)", del_hashes.len());
     let proof = mem_forest
         .prove(&del_hashes)
         .map_err(|e| format!("Failed to build proof: {e}"))?;
+    info!(
+        "Proof built: {} targets, {} hashes",
+        proof.targets.len(),
+        proof.hashes.len()
+    );
     let remember_positions = proof.targets.clone();
 
     // ---------------------------------------------------------------------
     // 4. Build a minimal Pollard (only roots)
     // ---------------------------------------------------------------------
+    info!(
+        "Creating Pollard skeleton from {} roots",
+        mem_forest.get_roots().len()
+    );
     let roots: Vec<_> = mem_forest
         .get_roots()
         .iter()
@@ -86,16 +113,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ---------------------------------------------------------------------
     // 5. Ingest the proof, keeping the required branches
     // ---------------------------------------------------------------------
+    info!("Ingesting proof into Pollard");
     pollard
         .ingest_proof(proof, &del_hashes, &remember_positions)
         .map_err(|e| format!("Failed to ingest proof: {e}"))?;
 
     // ---------------------------------------------------------------------
-    // 6. Output a few stats to show that it worked
+    // 6. Output a few stats via logging
     // ---------------------------------------------------------------------
-    println!("Loaded MemForest with {} leaves", mem_forest.leaves);
-    println!("Tracking {} leaves (will be deleted)", del_hashes.len());
-    println!("Pollard ready. Roots kept: {}", roots.len());
+    info!("Loaded MemForest with {} leaves", mem_forest.leaves);
+    info!("Tracking {} leaves (will be deleted)", del_hashes.len());
+    info!("Pollard ready. Roots kept: {}", roots.len());
 
     Ok(())
 }
