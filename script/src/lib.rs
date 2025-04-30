@@ -1,24 +1,24 @@
 //! Library functions for utreexo batch import
 use anyhow::{Context, Result};
+use bitcoin::hashes::{sha256d::Hash as Sha256dHash, Hash};
+use bitcoin::{Amount, BlockHash, OutPoint, ScriptBuf, TxOut};
 use duckdb::Connection;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
-use bitcoin::{BlockHash, OutPoint, TxOut, Amount, ScriptBuf};
-use bitcoin::hashes::{sha256d::Hash as Sha256dHash, Hash};
-use utreexo::LeafData;
 use std::path::Path;
+use utreexo::LeafData;
 
 /// Extract all leaf hashes from a Parquet file where coinbase = FALSE.
 /// Returns a vector of leaf hashes (one per UTXO).
 pub fn get_all_leaf_hashes<P: AsRef<Path>>(parquet: P) -> Result<Vec<BitcoinNodeHash>> {
     let parquet = parquet.as_ref();
     // Open in-memory DuckDB connection
-    let conn = Connection::open_in_memory()
-        .context("failed to open in-memory DuckDB")?;
+    let conn = Connection::open_in_memory().context("failed to open in-memory DuckDB")?;
     // Read Parquet into virtual table
     let path_str = parquet.to_str().context("invalid parquet path")?;
     let sql = format!(
         "SELECT txid, amount, vout, height, script \
-         FROM '{}' WHERE coinbase = FALSE", path_str
+         FROM '{}' WHERE coinbase = FALSE",
+        path_str
     );
     let mut stmt = conn
         .prepare(&sql)
@@ -36,8 +36,16 @@ pub fn get_all_leaf_hashes<P: AsRef<Path>>(parquet: P) -> Result<Vec<BitcoinNode
         let txid = txid_hex.parse().unwrap();
         let prevout = OutPoint { txid, vout };
         let header_code = (height as u32) << 1;
-        let utxo = TxOut { value: Amount::from_sat(sats), script_pubkey: ScriptBuf::from_bytes(script_bytes) };
-        let leaf = LeafData { block_hash, prevout, header_code, utxo };
+        let utxo = TxOut {
+            value: Amount::from_sat(sats),
+            script_pubkey: ScriptBuf::from_bytes(script_bytes),
+        };
+        let leaf = LeafData {
+            block_hash,
+            prevout,
+            header_code,
+            utxo,
+        };
         Ok(leaf.get_leaf_hashes())
     })? {
         let h = row.context("failed to map parquet row to leaf")?;
@@ -45,17 +53,19 @@ pub fn get_all_leaf_hashes<P: AsRef<Path>>(parquet: P) -> Result<Vec<BitcoinNode
     }
     Ok(leaves)
 }
+/// Include the updater module for fetching block input leaf hashes.
+pub mod updater;
 // Unit tests for get_all_leaf_hashes
 #[cfg(test)]
 mod tests {
     use super::*;
     use duckdb::Connection;
     use std::io;
-    use tempfile::tempdir;
 
     /// Helper to write a small Parquet file with given rows.
     fn make_parquet(path: &std::path::Path) -> io::Result<()> {
-        let conn = Connection::open_in_memory().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let conn =
+            Connection::open_in_memory().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         // create test table
         conn.execute(
             "CREATE TABLE utxos(
@@ -67,7 +77,8 @@ mod tests {
                 coinbase BOOLEAN
              )",
             [],
-        ).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        )
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         // insert two rows
         conn.execute(
             "INSERT INTO utxos VALUES
@@ -76,7 +87,9 @@ mod tests {
             [],
         ).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         // export to Parquet file
-        let pq = path.to_str().ok_or_else(|| io::Error::new(io::ErrorKind::Other, "path to string"))?;
+        let pq = path
+            .to_str()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "path to string"))?;
         conn.execute(&format!("COPY utxos TO '{}' (FORMAT 'parquet')", pq), [])
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         Ok(())
