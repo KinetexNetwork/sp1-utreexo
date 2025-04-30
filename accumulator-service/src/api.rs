@@ -1,6 +1,7 @@
 use actix_web::{web, HttpResponse, Responder};
 use serde::Deserialize;
 use crate::{Context, state_machine::Command};
+use std::path::PathBuf;
 
 /// Request to start or resume a build
 #[derive(Deserialize)]
@@ -56,13 +57,14 @@ pub async fn post_update(
 
 /// POST /dump: trigger pollard prune and return 202 Accepted
 pub async fn post_dump(ctx: web::Data<Context>) -> impl Responder {
-    let _ = ctx.send(Command::Dump).await;
+    // default dump directory "snapshot" inside current working directory
+    let _ = ctx.send(Command::Dump { dir: PathBuf::from("snapshot") }).await;
     HttpResponse::Accepted().finish()
 }
 
 /// POST /restore: trigger service to reload state from disk
 pub async fn post_restore(ctx: web::Data<Context>) -> impl Responder {
-    let _ = ctx.send(Command::Restore(Vec::new())).await;
+    let _ = ctx.send(Command::Restore { dir: PathBuf::from("snapshot") }).await;
     HttpResponse::Created().finish()
 }
 

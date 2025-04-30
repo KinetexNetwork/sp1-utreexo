@@ -16,6 +16,7 @@ dependencies = [
  "rustreexo",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "utreexo",
  "utreexo-script",

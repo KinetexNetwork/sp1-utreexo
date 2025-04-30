@@ -21,3 +21,7 @@ bitcoin = { version = "0.32", features = ["serde"] }
 rustreexo = { version = "0.4", features = ["with-serde"] }
 utreexo = { path = "../utreexo" }
 "utreexo-script" = { path = "../script" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time" ] }
+tempfile = "3"
