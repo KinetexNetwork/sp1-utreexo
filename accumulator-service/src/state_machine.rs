@@ -55,14 +55,27 @@ impl Context {
                 Command::Dump => {
                     // Spawn pollard prune task
                     let state_clone = state_bg.clone();
-                    task::spawn(async move {
-                        // stub: prune the forest with placeholder delete list
-                        let res = crate::pollard::prune_forest("mem_forest.bin", "delete_list").await;
-                        let mut s = state_clone.write().await;
-                        match res {
-                            Ok(_) => *s = ServiceState::Idle,
-                            Err(e) => *s = ServiceState::Error { message: e.to_string() },
-                        }
+                    task::spawn_blocking(move || {
+                        // Real prune: read serialized MemForest, produce Pollard, serialize it
+                        let res: std::io::Result<()> = (|| {
+                            let data = std::fs::read("mem_forest.bin")?;
+                            let pollard = utreexo_script::pollard::forest_to_pollard(&data, &[])
+                                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                            let mut f = std::fs::File::create("pollard.bin")?;
+                            pollard.serialize(&mut f)
+                                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                            Ok(())
+                        })();
+                        // On completion, update state
+                        let mut rt = tokio::runtime::Handle::current();
+                        let state_inner = state_clone.clone();
+                        rt.spawn(async move {
+                            let mut s = state_inner.write().await;
+                            match res {
+                                Ok(_) => *s = ServiceState::Idle,
+                                Err(e) => *s = ServiceState::Error { message: e.to_string() },
+                            }
+                        });
                     });
                 }
                 Command::Restore(data) => {
@@ -116,7 +129,7 @@ impl Context {
                         }
                     });
                 }
-                    _ => {}
+                // All command variants are handled explicitly above
                 }
             }
         });

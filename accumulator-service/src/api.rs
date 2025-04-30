@@ -54,13 +54,13 @@ pub async fn post_update(
     HttpResponse::Accepted().finish()
 }
 
-/// POST /dump
+/// POST /dump: trigger pollard prune and return 202 Accepted
 pub async fn post_dump(ctx: web::Data<Context>) -> impl Responder {
     let _ = ctx.send(Command::Dump).await;
     HttpResponse::Accepted().finish()
 }
 
-/// POST /restore
+/// POST /restore: trigger service to reload state from disk
 pub async fn post_restore(ctx: web::Data<Context>) -> impl Responder {
     let _ = ctx.send(Command::Restore(Vec::new())).await;
     HttpResponse::Created().finish()
