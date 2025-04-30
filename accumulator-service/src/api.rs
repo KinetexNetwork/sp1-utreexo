@@ -1,11 +1,12 @@
 use actix_web::{web, HttpResponse, Responder};
 use serde::Deserialize;
-use crate::Context;
+use crate::{Context, state_machine::Command};
 
+/// Request to start or resume a build
 #[derive(Deserialize)]
 pub struct BuildRequest {
-    parquet: String,
-    resume_from: Option<String>,
+    pub parquet: String,
+    pub resume_from: Option<String>,
 }
 
 /// POST /build
@@ -13,10 +14,7 @@ pub async fn post_build(
     ctx: web::Data<Context>,
     req: web::Json<BuildRequest>,
 ) -> impl Responder {
-    let _ = ctx.send(crate::state_machine::Command::Build {
-        parquet: req.parquet.clone(),
-        resume_from: req.resume_from.clone(),
-    }).await;
+    let _ = ctx.send(Command::Build { parquet: req.parquet.clone(), resume_from: req.resume_from.clone() }).await;
     HttpResponse::Accepted().finish()
 }
 
@@ -26,12 +24,59 @@ pub async fn get_status(ctx: web::Data<Context>) -> impl Responder {
     HttpResponse::Ok().json(status)
 }
 
+/// POST /pause
+pub async fn post_pause(ctx: web::Data<Context>) -> impl Responder {
+    let _ = ctx.send(Command::Pause).await;
+    HttpResponse::Accepted().finish()
+}
+
+/// POST /resume
+pub async fn post_resume(ctx: web::Data<Context>) -> impl Responder {
+    let _ = ctx.send(Command::Resume).await;
+    HttpResponse::Accepted().finish()
+}
+
+/// POST /stop
+pub async fn post_stop(ctx: web::Data<Context>) -> impl Responder {
+    let _ = ctx.send(Command::Stop).await;
+    HttpResponse::Accepted().finish()
+}
+
+/// Request to update a single block
+#[derive(Deserialize)]
+pub struct UpdateRequest { pub height: u64 }
+/// POST /update
+pub async fn post_update(
+    ctx: web::Data<Context>,
+    req: web::Json<UpdateRequest>,
+) -> impl Responder {
+    let _ = ctx.send(Command::Update(req.height)).await;
+    HttpResponse::Accepted().finish()
+}
+
+/// POST /dump
+pub async fn post_dump(ctx: web::Data<Context>) -> impl Responder {
+    let _ = ctx.send(Command::Dump).await;
+    HttpResponse::Accepted().finish()
+}
+
+/// POST /restore
+pub async fn post_restore(ctx: web::Data<Context>) -> impl Responder {
+    let _ = ctx.send(Command::Restore(Vec::new())).await;
+    HttpResponse::Created().finish()
+}
+
+
 /// Configure routes
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("/build").route(web::post().to(post_build))
     )
-    .service(
-        web::resource("/status").route(web::get().to(get_status))
-    );
+    .service(web::resource("/pause").route(web::post().to(post_pause)))
+    .service(web::resource("/resume").route(web::post().to(post_resume)))
+    .service(web::resource("/stop").route(web::post().to(post_stop)))
+    .service(web::resource("/update").route(web::post().to(post_update)))
+    .service(web::resource("/dump").route(web::post().to(post_dump)))
+    .service(web::resource("/restore").route(web::post().to(post_restore)))
+    .service(web::resource("/status").route(web::get().to(get_status)));
 }

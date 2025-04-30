@@ -52,26 +52,70 @@ impl Context {
         task::spawn(async move {
             while let Some(cmd) = rx.recv().await {
                 match cmd {
-                    Command::Build { .. } => {
+                Command::Dump => {
+                    // Spawn pollard prune task
+                    let state_clone = state_bg.clone();
+                    task::spawn(async move {
+                        // stub: prune the forest with placeholder delete list
+                        let res = crate::pollard::prune_forest("mem_forest.bin", "delete_list").await;
+                        let mut s = state_clone.write().await;
+                        match res {
+                            Ok(_) => *s = ServiceState::Idle,
+                            Err(e) => *s = ServiceState::Error { message: e.to_string() },
+                        }
+                    });
+                }
+                Command::Restore(data) => {
+                    // stub: restore state from uploaded data
+                    let mut s = state_bg.write().await;
+                    *s = ServiceState::Idle;
+                }
+                Command::Build { parquet, resume_from } => {
+                    // Enter building state
+                    {
                         let mut s = state_bg.write().await;
                         *s = ServiceState::Building;
                     }
-                    Command::Pause => {
-                        let mut s = state_bg.write().await;
-                        *s = ServiceState::Paused;
-                    }
-                    Command::Resume => {
-                        let mut s = state_bg.write().await;
-                        *s = ServiceState::Building;
-                    }
-                    Command::Stop => {
-                        let mut s = state_bg.write().await;
-                        *s = ServiceState::Idle;
-                    }
-                    Command::Update(h) => {
+                    // Spawn build task
+                    let state_clone = state_bg.clone();
+                    task::spawn(async move {
+                        // Call the builder logic
+                        let res = crate::builder::start_build(&parquet, resume_from.as_deref()).await;
+                        let mut s = state_clone.write().await;
+                        match res {
+                            Ok(_) => *s = ServiceState::Idle,
+                            Err(e) => *s = ServiceState::Error { message: e.to_string() },
+                        }
+                    });
+                }
+                Command::Pause => {
+                    let mut s = state_bg.write().await;
+                    *s = ServiceState::Paused;
+                }
+                Command::Resume => {
+                    let mut s = state_bg.write().await;
+                    *s = ServiceState::Building;
+                }
+                Command::Stop => {
+                    let mut s = state_bg.write().await;
+                    *s = ServiceState::Idle;
+                }
+                Command::Update(h) => {
+                    // Enter updating state and spawn update task
+                    {
                         let mut s = state_bg.write().await;
                         *s = ServiceState::Updating { height: h };
                     }
+                    let state_clone = state_bg.clone();
+                    task::spawn(async move {
+                        let res = crate::updater::update_block(h).await;
+                        let mut s = state_clone.write().await;
+                        match res {
+                            Ok(_) => *s = ServiceState::Idle,
+                            Err(e) => *s = ServiceState::Error { message: e.to_string() },
+                        }
+                    });
+                }
                     _ => {}
                 }
             }
