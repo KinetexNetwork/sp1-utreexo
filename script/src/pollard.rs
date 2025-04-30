@@ -1,13 +1,16 @@
 //! Library for converting a serialized MemForest into a pruned Pollard given delete hashes.
 use anyhow::{Context, Result};
 use rustreexo::accumulator::mem_forest::MemForest;
-use rustreexo::accumulator::pollard::Pollard;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
-use std::io::{Read, Cursor};
+use rustreexo::accumulator::pollard::Pollard;
+use std::io::Cursor;
 
 /// Take a serialized MemForest (as bytes) and a list of leaf hashes to delete,
 /// then return a Pollard pruned to those leaves.
-pub fn forest_to_pollard(bytes: &[u8], delete_hashes: &[BitcoinNodeHash]) -> Result<Pollard<BitcoinNodeHash>> {
+pub fn forest_to_pollard(
+    bytes: &[u8],
+    delete_hashes: &[BitcoinNodeHash],
+) -> Result<Pollard<BitcoinNodeHash>> {
     // Deserialize the MemForest
     let mut cursor = Cursor::new(bytes);
     let mem_forest = MemForest::<BitcoinNodeHash>::deserialize(&mut cursor)

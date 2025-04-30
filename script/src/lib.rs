@@ -53,6 +53,9 @@ pub fn get_all_leaf_hashes<P: AsRef<Path>>(parquet: P) -> Result<Vec<BitcoinNode
     }
     Ok(leaves)
 }
+
+/// Expose pollard conversion from MemForest to Pollard.
+pub mod pollard;
 /// Include the updater module for fetching block input leaf hashes.
 pub mod updater;
 // Unit tests for get_all_leaf_hashes
