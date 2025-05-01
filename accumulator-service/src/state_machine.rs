@@ -1,215 +1,290 @@
 use serde::Serialize;
-use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock, Mutex};
-use tokio::task;
-use std::time::Instant;
-
-
-
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::select;
+use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::task;
+use tokio_util::sync::CancellationToken;
+use anyhow;
 
-/// Commands sent to the service worker.
-#[derive(Debug)]
+use crate::{builder, updater};
+
+/// Commands accepted by the service.
+#[derive(Debug, Clone)]
 pub enum Command {
-    Build { parquet: String, resume_from: Option<String> },
+    Build {
+        parquet: String,
+        resume_from: Option<String>,
+    },
+    Update(u64),
     Pause,
     Resume,
     Stop,
-    Update(u64),
-    /// Create a snapshot of the current accumulator into the given directory.
     Dump { dir: PathBuf },
-    /// Restore the in-memory snapshot **and** on-disk files from the given directory.
     Restore { dir: PathBuf },
 }
 
-/// Public state of the service.
-#[derive(Clone, Serialize)]
+/// Public state as exposed via the REST API.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "state", rename_all = "lowercase")]
 pub enum ServiceState {
     Idle,
     Building,
-    Paused,
     Updating { height: u64 },
-    Error { message: String },
+    Paused,
+    Error { msg: String },
 }
 
-/// Simple status snapshot.
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Status {
     pub state: ServiceState,
     pub uptime_secs: u64,
 }
 
-/// Shared context for the accumulator service.
+/// Internally tracked long-running task so we can cancel / resume.
+#[derive(Clone)]
+enum JobKind {
+    Build {
+        parquet: String,
+        resume_from: Option<String>,
+    },
+    Update(u64),
+}
+
+struct RunningJob {
+    cancel: CancellationToken,
+    join:   task::JoinHandle<anyhow::Result<()>>, // finished result
+    kind:   JobKind,
+}
+
+/// Main handle used by HTTP layer.
 #[derive(Clone)]
 pub struct Context {
     state: Arc<RwLock<ServiceState>>,
-    start_time: Instant,
-    tx: mpsc::Sender<Command>,
-    // Global mutex to serialise any on-disk snapshot mutation.
-    fs_lock: Arc<Mutex<()>>, 
+    start: std::time::Instant,
+    tx:    mpsc::Sender<Command>,
 }
 
 impl Context {
-    /// Create and start the background worker.
     pub fn new() -> Self {
-        let (tx, mut rx) = mpsc::channel(8);
+        let (tx, mut rx) = mpsc::channel::<Command>(8);
+        let tx_bg = tx.clone();
         let state = Arc::new(RwLock::new(ServiceState::Idle));
         let state_bg = state.clone();
         let fs_lock = Arc::new(Mutex::new(()));
-        let fs_lock_bg = fs_lock.clone();
-        // spawn worker
+
         task::spawn(async move {
+            let mut running: Option<RunningJob> = None;
             while let Some(cmd) = rx.recv().await {
                 match cmd {
-                Command::Dump { dir } => {
-                    let state_clone = state_bg.clone();
-                    let fs_lock = fs_lock_bg.clone();
-                    task::spawn(async move {
-                        let res = Self::perform_dump(dir, fs_lock).await;
-                        let mut s = state_clone.write().await;
-                        match res {
-                            Ok(_) => *s = ServiceState::Idle,
-                            Err(e) => *s = ServiceState::Error { message: e.to_string() },
+                    // =========== BUILD ============
+                    Command::Build { parquet, resume_from } => {
+                        if running.is_some() {
+                            // reject – already busy
+                            continue;
                         }
-                    });
-                }
-                Command::Restore { dir } => {
-                    let state_clone = state_bg.clone();
-                    let fs_lock = fs_lock_bg.clone();
-                    task::spawn(async move {
-                        let res = Self::perform_restore(dir, fs_lock).await;
-                        let mut s = state_clone.write().await;
-                        match res {
-                            Ok(_) => *s = ServiceState::Idle,
-                            Err(e) => *s = ServiceState::Error { message: e.to_string() },
-                        }
-                    });
-                }
-                Command::Build { parquet, resume_from } => {
-                    // Enter building state
-                    {
-                        let mut s = state_bg.write().await;
-                        *s = ServiceState::Building;
+                        *state_bg.write().await = ServiceState::Building;
+                        let cancel = CancellationToken::new();
+                        let task_cancel = cancel.clone();
+
+                        // clone for storage & move into async
+                        let parquet_clone = parquet.clone();
+                        let resume_clone = resume_from.clone();
+
+                        let handle = task::spawn(async move {
+                            run_with_cancel(task_cancel, async move {
+                                builder::start_build(&parquet, resume_from.as_deref()).await
+                            })
+                            .await
+                        });
+                        running = Some(RunningJob {
+                            cancel,
+                            join: handle,
+                            kind: JobKind::Build {
+                                parquet: parquet_clone,
+                                resume_from: resume_clone,
+                            },
+                        });
                     }
-                    // Spawn build task
-                    let state_clone = state_bg.clone();
-                    task::spawn(async move {
-                        // Call the builder logic
-                        let res = crate::builder::start_build(&parquet, resume_from.as_deref()).await;
-                        let mut s = state_clone.write().await;
-                        match res {
-                            Ok(_) => *s = ServiceState::Idle,
-                            Err(e) => *s = ServiceState::Error { message: e.to_string() },
+                    // =========== UPDATE ============
+                    Command::Update(h) => {
+                        if running.is_some() {
+                            continue;
                         }
-                    });
-                }
-                Command::Pause => {
-                    let mut s = state_bg.write().await;
-                    *s = ServiceState::Paused;
-                }
-                Command::Resume => {
-                    let mut s = state_bg.write().await;
-                    *s = ServiceState::Building;
-                }
-                Command::Stop => {
-                    let mut s = state_bg.write().await;
-                    *s = ServiceState::Idle;
-                }
-                Command::Update(h) => {
-                    // Enter updating state and spawn update task
-                    {
-                        let mut s = state_bg.write().await;
-                        *s = ServiceState::Updating { height: h };
+                        *state_bg.write().await = ServiceState::Updating { height: h };
+                        let cancel = CancellationToken::new();
+                        let task_cancel = cancel.clone();
+                        let handle = task::spawn(async move {
+                            run_with_cancel(task_cancel, async move { updater::update_block(h).await })
+                                .await
+                        });
+                        running = Some(RunningJob {
+                            cancel,
+                            join: handle,
+                            kind: JobKind::Update(h),
+                        });
                     }
-                    let state_clone = state_bg.clone();
-                    task::spawn(async move {
-                        let res = crate::updater::update_block(h).await;
-                        let mut s = state_clone.write().await;
-                        match res {
-                            Ok(_) => *s = ServiceState::Idle,
-                            Err(e) => *s = ServiceState::Error { message: e.to_string() },
+                    // =========== PAUSE ============
+                    Command::Pause => {
+                        if let Some(job) = &running {
+                            job.cancel.cancel();
                         }
-                    });
+                        *state_bg.write().await = ServiceState::Paused;
+                    }
+                    // =========== RESUME ============
+                    Command::Resume => {
+                        if *state_bg.read().await != ServiceState::Paused {
+                            continue;
+                        }
+                        if let Some(prev) = running.take() {
+                            match prev.kind.clone() {
+                                JobKind::Build { parquet, resume_from } => {
+                                    let _ = tx_bg.send(Command::Build { parquet, resume_from }).await;
+                                }
+                                JobKind::Update(h) => {
+                                    let _ = tx_bg.send(Command::Update(h)).await;
+                                }
+                            }
+                        }
+                    }
+                    // =========== STOP ============
+                    Command::Stop => {
+                        if let Some(job) = &running {
+                            job.cancel.cancel();
+                        }
+                        running = None;
+                        *state_bg.write().await = ServiceState::Idle;
+                    }
+                    // =========== DUMP ============
+                    Command::Dump { dir } => {
+                        // Serialised via fs_lock
+                        let lock = fs_lock.clone();
+                        let st = state_bg.clone();
+                        task::spawn(async move {
+                            let _g = lock.lock().await;
+                            let res = state_helpers::perform_dump(dir).await;
+                            if let Err(e) = res {
+                                *st.write().await = ServiceState::Error { msg: e.to_string() };
+                            }
+                        });
+                    }
+                    // =========== RESTORE ============
+                    Command::Restore { dir } => {
+                        let lock = fs_lock.clone();
+                        let st = state_bg.clone();
+                        if let Some(job) = &running {
+                            job.cancel.cancel();
+                            running = None;
+                        }
+                        *st.write().await = ServiceState::Idle;
+                        task::spawn(async move {
+                            let _g = lock.lock().await;
+                            let res = state_helpers::perform_restore(dir).await;
+                            if let Err(e) = res {
+                                *st.write().await = ServiceState::Error { msg: e.to_string() };
+                            }
+                        });
+                    }
                 }
-                // All command variants are handled explicitly above
+
+                // poll finished job (non-blocking)
+                if running
+                    .as_ref()
+                    .map(|j| j.join.is_finished())
+                    .unwrap_or(false)
+                {
+                    // Safe to unwrap because checked above
+                    let job = running.take().unwrap();
+                    match job.join.await {
+                        Ok(Ok(_)) => *state_bg.write().await = ServiceState::Idle,
+                        Ok(Err(e)) => {
+                            *state_bg.write().await = ServiceState::Error { msg: e.to_string() }
+                        }
+                        Err(e) => *state_bg.write().await = ServiceState::Error {
+                            msg: format!("join error: {e}")
+                        },
+                    }
                 }
             }
         });
-        Context { state, start_time: Instant::now(), tx, fs_lock }
+
+        Context {
+            state,
+            start: std::time::Instant::now(),
+            tx,
+        }
     }
 
-    /// Send a command to the worker.
     pub async fn send(&self, cmd: Command) -> Result<(), mpsc::error::SendError<Command>> {
         self.tx.send(cmd).await
     }
 
-    /// Get a snapshot of the current status.
     pub async fn status(&self) -> Status {
-        let s = self.state.read().await.clone();
-        let uptime_secs = self.start_time.elapsed().as_secs();
-        Status { state: s, uptime_secs }
+        Status {
+            uptime_secs: self.start.elapsed().as_secs(),
+            state: self.state.read().await.clone(),
+        }
+    }
+}
+
+// ------------------------------------------------------------------
+// helper util fn: run future until cancel fires
+// ------------------------------------------------------------------
+async fn run_with_cancel<F>(cancel: CancellationToken, fut: F) -> anyhow::Result<()>
+where
+    F: std::future::Future<Output = anyhow::Result<()>>,
+{
+    select! {
+        _ = cancel.cancelled() => Ok(()),
+        res = fut => res,
+    }
+}
+
+// ------------------------------------------------------------------
+// extract dump / restore helpers from earlier phase (reuse)
+// ------------------------------------------------------------------
+
+mod state_helpers {
+    use std::path::PathBuf;
+    use std::io::{Error, ErrorKind};
+
+    /// Copy snapshot plus derive pollard (same as Phase-A implementation).
+    pub fn dump_sync(dir: PathBuf) -> std::io::Result<()> {
+        std::fs::create_dir_all(&dir)?;
+        std::fs::copy("mem_forest.bin", dir.join("mem_forest.bin"))?;
+        if std::path::Path::new("block_hashes.bin").exists() {
+            let _ = std::fs::copy("block_hashes.bin", dir.join("block_hashes.bin"));
+        }
+        let forest_bytes = std::fs::read("mem_forest.bin")?;
+        let pollard = utreexo_script::pollard::forest_to_pollard(&forest_bytes, &[])
+            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+        let mut f = std::fs::File::create(dir.join("pollard.bin"))?;
+        pollard.serialize(&mut f).map_err(|e| Error::new(ErrorKind::Other, e))?;
+        Ok(())
     }
 
-    // ------------------------------------------------------------------
-    // Internal helpers (dump / restore) – Phase-A implementation
-    // ------------------------------------------------------------------
-
-    async fn perform_dump(dir: PathBuf, fs_lock: Arc<Mutex<()>>) -> std::io::Result<()> {
-        // hold lock until function returns to avoid races
-        let _guard = fs_lock.lock().await;
-
-        // The heavy IO runs in blocking thread so we don't stall the async runtime.
-        tokio::task::spawn_blocking(move || -> std::io::Result<()> {
-            std::fs::create_dir_all(&dir)?;
-
-            // 1. Copy current mem_forest snapshot
-            std::fs::copy("mem_forest.bin", dir.join("mem_forest.bin"))?;
-
-            // 2. Copy block_hashes.bin if it exists
-            if std::path::Path::new("block_hashes.bin").exists() {
-                let _ = std::fs::copy("block_hashes.bin", dir.join("block_hashes.bin"));
-            }
-
-            // 3. Build pollard from current forest and store
-            let forest_bytes = std::fs::read("mem_forest.bin")?;
-            let pollard = utreexo_script::pollard::forest_to_pollard(&forest_bytes, &[])
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-            let mut f = std::fs::File::create(dir.join("pollard.bin"))?;
-            pollard
-                .serialize(&mut f)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-            Ok(())
-        })
-        .await?
+    pub fn restore_sync(dir: PathBuf) -> std::io::Result<()> {
+        let forest_src = dir.join("mem_forest.bin");
+        let pollard_src = dir.join("pollard.bin");
+        if !forest_src.exists() || !pollard_src.exists() {
+            return Err(Error::new(ErrorKind::NotFound, "snapshot missing files"));
+        }
+        let _ = std::fs::remove_file("mem_forest.bin");
+        let _ = std::fs::remove_file("pollard.bin");
+        std::fs::copy(&forest_src, "mem_forest.bin")?;
+        std::fs::copy(&pollard_src, "pollard.bin")?;
+        let bh = dir.join("block_hashes.bin");
+        if bh.exists() {
+            let _ = std::fs::copy(bh, "block_hashes.bin");
+        }
+        Ok(())
     }
 
-    async fn perform_restore(dir: PathBuf, fs_lock: Arc<Mutex<()>>) -> std::io::Result<()> {
-        let _guard = fs_lock.lock().await;
+    pub async fn perform_dump(dir: PathBuf) -> std::io::Result<()> {
+        tokio::task::spawn_blocking(move || dump_sync(dir)).await?
+    }
 
-        tokio::task::spawn_blocking(move || -> std::io::Result<()> {
-            let forest_src = dir.join("mem_forest.bin");
-            let pollard_src = dir.join("pollard.bin");
-
-            if !forest_src.exists() || !pollard_src.exists() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "snapshot missing mem_forest.bin or pollard.bin",
-                ));
-            }
-
-            // Overwrite destination files atomically by first removing them.
-            let _ = std::fs::remove_file("mem_forest.bin");
-            let _ = std::fs::remove_file("pollard.bin");
-            std::fs::copy(&forest_src, "mem_forest.bin")?;
-            std::fs::copy(&pollard_src, "pollard.bin")?;
-
-            let bh_src = dir.join("block_hashes.bin");
-            if bh_src.exists() {
-                let _ = std::fs::copy(bh_src, "block_hashes.bin");
-            }
-            Ok(())
-        })
-        .await?
+    pub async fn perform_restore(dir: PathBuf) -> std::io::Result<()> {
+        tokio::task::spawn_blocking(move || restore_sync(dir)).await?
     }
 }
