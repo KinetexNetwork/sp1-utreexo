@@ -65,6 +65,12 @@ pub struct Context {
     tx:    mpsc::Sender<Command>,
 }
 
+#[derive(Debug)]
+pub enum DispatchError {
+    InvalidState,
+    ChannelClosed,
+}
+
 impl Context {
     pub fn new() -> Self {
         let (tx, mut rx) = mpsc::channel::<Command>(8);
@@ -215,14 +221,46 @@ impl Context {
         }
     }
 
-    pub async fn send(&self, cmd: Command) -> Result<(), mpsc::error::SendError<Command>> {
-        self.tx.send(cmd).await
+    /// Validate transition and forward command to worker.
+    pub async fn send(&self, cmd: Command) -> Result<(), DispatchError> {
+        // fast path: check state machine rules first
+        if !self.is_valid_transition(&cmd).await {
+            return Err(DispatchError::InvalidState);
+        }
+        self.tx
+            .send(cmd)
+            .await
+            .map_err(|_| DispatchError::ChannelClosed)
     }
 
     pub async fn status(&self) -> Status {
         Status {
             uptime_secs: self.start.elapsed().as_secs(),
             state: self.state.read().await.clone(),
+        }
+    }
+
+    async fn is_valid_transition(&self, cmd: &Command) -> bool {
+        use ServiceState::*;
+        let state = self.state.read().await.clone();
+        match (state, cmd) {
+            (ServiceState::Idle, Command::Build { .. }) => true,
+            (ServiceState::Idle, Command::Update(_)) => true,
+            (ServiceState::Idle, Command::Dump { .. }) => true,
+            (ServiceState::Idle, Command::Restore { .. }) => true,
+
+            (ServiceState::Building, Command::Pause) => true,
+            (ServiceState::Building, Command::Stop) => true,
+
+            (ServiceState::Updating { .. }, Command::Pause) => true,
+            (ServiceState::Updating { .. }, Command::Stop) => true,
+
+            (ServiceState::Paused, Command::Resume) => true,
+            (ServiceState::Paused, Command::Stop) => true,
+
+            (ServiceState::Error { .. }, Command::Restore { .. }) => true,
+
+            _ => false,
         }
     }
 }

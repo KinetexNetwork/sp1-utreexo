@@ -1,6 +1,6 @@
 use actix_web::{web, HttpResponse, Responder};
 use serde::Deserialize;
-use crate::{Context, state_machine::Command};
+use crate::{Context, state_machine::{Command, DispatchError}};
 use std::path::PathBuf;
 
 /// Request to start or resume a build
@@ -15,8 +15,11 @@ pub async fn post_build(
     ctx: web::Data<Context>,
     req: web::Json<BuildRequest>,
 ) -> impl Responder {
-    let _ = ctx.send(Command::Build { parquet: req.parquet.clone(), resume_from: req.resume_from.clone() }).await;
-    HttpResponse::Accepted().finish()
+    match ctx.send(Command::Build { parquet: req.parquet.clone(), resume_from: req.resume_from.clone() }).await {
+        Ok(_) => HttpResponse::Accepted().finish(),
+        Err(DispatchError::InvalidState) => HttpResponse::Conflict().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
 }
 
 /// GET /status
@@ -27,20 +30,29 @@ pub async fn get_status(ctx: web::Data<Context>) -> impl Responder {
 
 /// POST /pause
 pub async fn post_pause(ctx: web::Data<Context>) -> impl Responder {
-    let _ = ctx.send(Command::Pause).await;
-    HttpResponse::Accepted().finish()
+    match ctx.send(Command::Pause).await {
+        Ok(_) => HttpResponse::Accepted().finish(),
+        Err(DispatchError::InvalidState) => HttpResponse::Conflict().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
 }
 
 /// POST /resume
 pub async fn post_resume(ctx: web::Data<Context>) -> impl Responder {
-    let _ = ctx.send(Command::Resume).await;
-    HttpResponse::Accepted().finish()
+    match ctx.send(Command::Resume).await {
+        Ok(_) => HttpResponse::Accepted().finish(),
+        Err(DispatchError::InvalidState) => HttpResponse::Conflict().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
 }
 
 /// POST /stop
 pub async fn post_stop(ctx: web::Data<Context>) -> impl Responder {
-    let _ = ctx.send(Command::Stop).await;
-    HttpResponse::Accepted().finish()
+    match ctx.send(Command::Stop).await {
+        Ok(_) => HttpResponse::Accepted().finish(),
+        Err(DispatchError::InvalidState) => HttpResponse::Conflict().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
 }
 
 /// Request to update a single block
@@ -51,21 +63,30 @@ pub async fn post_update(
     ctx: web::Data<Context>,
     req: web::Json<UpdateRequest>,
 ) -> impl Responder {
-    let _ = ctx.send(Command::Update(req.height)).await;
-    HttpResponse::Accepted().finish()
+    match ctx.send(Command::Update(req.height)).await {
+        Ok(_) => HttpResponse::Accepted().finish(),
+        Err(DispatchError::InvalidState) => HttpResponse::Conflict().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
 }
 
 /// POST /dump: trigger pollard prune and return 202 Accepted
 pub async fn post_dump(ctx: web::Data<Context>) -> impl Responder {
     // default dump directory "snapshot" inside current working directory
-    let _ = ctx.send(Command::Dump { dir: PathBuf::from("snapshot") }).await;
-    HttpResponse::Accepted().finish()
+    match ctx.send(Command::Dump { dir: PathBuf::from("snapshot") }).await {
+        Ok(_) => HttpResponse::Accepted().finish(),
+        Err(DispatchError::InvalidState) => HttpResponse::Conflict().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
 }
 
 /// POST /restore: trigger service to reload state from disk
 pub async fn post_restore(ctx: web::Data<Context>) -> impl Responder {
-    let _ = ctx.send(Command::Restore { dir: PathBuf::from("snapshot") }).await;
-    HttpResponse::Created().finish()
+    match ctx.send(Command::Restore { dir: PathBuf::from("snapshot") }).await {
+        Ok(_) => HttpResponse::Created().finish(),
+        Err(DispatchError::InvalidState) => HttpResponse::Conflict().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
 }
 
 
