@@ -7,13 +7,6 @@ edition = "2021"
 name = "utreexo"
 path = "src/bin/utreexo.rs"
 
-[[example]]
-name = "mem_forest_to_pollard"
-path = "../examples/mem_forest_to_pollard.rs"
-
-[[example]]
-name = "get_block_inputs"
-path = "../examples/get_block_inputs.rs"
 
 [dependencies]
 bitcoin = { version = "0.32", features = ["serde"] }
