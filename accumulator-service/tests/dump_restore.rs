@@ -27,9 +27,11 @@ async fn dump_and_restore_roundtrip() {
     // create context & issue dump
     let ctx = Context::new();
     let snapshot_dir = workdir.path().join("snap");
-    ctx.send(Command::Dump { dir: snapshot_dir.clone() })
-        .await
-        .unwrap();
+    ctx.send(Command::Dump {
+        dir: snapshot_dir.clone(),
+    })
+    .await
+    .unwrap();
 
     // Wait until mem_forest.bin appears in snapshot dir (dump finished)
     for _ in 0..20 {
@@ -48,9 +50,11 @@ async fn dump_and_restore_roundtrip() {
     std::fs::remove_file("mem_forest.bin").unwrap();
 
     // restore
-    ctx.send(Command::Restore { dir: snapshot_dir.clone() })
-        .await
-        .unwrap();
+    ctx.send(Command::Restore {
+        dir: snapshot_dir.clone(),
+    })
+    .await
+    .unwrap();
     wait_until_idle(&ctx).await;
 
     // after restore mem_forest.bin contents should equal snapshot copy

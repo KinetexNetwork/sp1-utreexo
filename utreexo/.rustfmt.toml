@@ -7,9 +7,7 @@ group_imports = "StdExternalCrate"
 # lines
 newline_style = "Unix"
 
-force_explicit_unsafe = true
 
-chain_split_single_line = true
 chain_width = 30
 
 array_width = 40

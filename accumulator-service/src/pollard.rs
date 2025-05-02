@@ -10,11 +10,12 @@ pub async fn prune_forest(snapshot_path: &str, _delete_list: &str) -> Result<()>
     // Load the full MemForest bytes
     let data = fs::read(snapshot_path)?;
     // Convert to Pollard (empty deletions by default)
-    let pollard = forest_to_pollard(&data, &[])
-        .map_err(|e| anyhow!("pollard conversion failed: {}", e))?;
+    let pollard =
+        forest_to_pollard(&data, &[]).map_err(|e| anyhow!("pollard conversion failed: {}", e))?;
     // Serialize Pollard to disk
     let mut out = fs::File::create("pollard.bin")?;
-    pollard.serialize(&mut out)
+    pollard
+        .serialize(&mut out)
         .map_err(|e| anyhow::anyhow!("failed to serialize Pollard: {}", e))?;
     Ok(())
 }

@@ -1,6 +1,6 @@
-use actix_web::{App, HttpServer, web};
+use accumulator_service::{api, Context};
+use actix_web::{web, App, HttpServer};
 use log::info;
-use accumulator_service::{Context, api};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {

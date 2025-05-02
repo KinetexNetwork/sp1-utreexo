@@ -1,3 +1,4 @@
+use anyhow;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -5,7 +6,6 @@ use tokio::select;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task;
 use tokio_util::sync::CancellationToken;
-use anyhow;
 
 use crate::{builder, updater};
 
@@ -20,8 +20,12 @@ pub enum Command {
     Pause,
     Resume,
     Stop,
-    Dump { dir: PathBuf },
-    Restore { dir: PathBuf },
+    Dump {
+        dir: PathBuf,
+    },
+    Restore {
+        dir: PathBuf,
+    },
 }
 
 /// Public state as exposed via the REST API.
@@ -53,8 +57,8 @@ enum JobKind {
 
 struct RunningJob {
     cancel: CancellationToken,
-    join:   task::JoinHandle<anyhow::Result<()>>, // finished result
-    kind:   JobKind,
+    join: task::JoinHandle<anyhow::Result<()>>, // finished result
+    kind: JobKind,
 }
 
 /// Main handle used by HTTP layer.
@@ -62,7 +66,7 @@ struct RunningJob {
 pub struct Context {
     state: Arc<RwLock<ServiceState>>,
     start: std::time::Instant,
-    tx:    mpsc::Sender<Command>,
+    tx: mpsc::Sender<Command>,
 }
 
 #[derive(Debug)]
@@ -84,7 +88,10 @@ impl Context {
             while let Some(cmd) = rx.recv().await {
                 match cmd {
                     // =========== BUILD ============
-                    Command::Build { parquet, resume_from } => {
+                    Command::Build {
+                        parquet,
+                        resume_from,
+                    } => {
                         if running.is_some() {
                             // reject – already busy
                             continue;
@@ -121,8 +128,11 @@ impl Context {
                         let cancel = CancellationToken::new();
                         let task_cancel = cancel.clone();
                         let handle = task::spawn(async move {
-                            run_with_cancel(task_cancel, async move { updater::update_block(h).await })
-                                .await
+                            run_with_cancel(
+                                task_cancel,
+                                async move { updater::update_block(h).await },
+                            )
+                            .await
                         });
                         running = Some(RunningJob {
                             cancel,
@@ -144,8 +154,16 @@ impl Context {
                         }
                         if let Some(prev) = running.take() {
                             match prev.kind.clone() {
-                                JobKind::Build { parquet, resume_from } => {
-                                    let _ = tx_bg.send(Command::Build { parquet, resume_from }).await;
+                                JobKind::Build {
+                                    parquet,
+                                    resume_from,
+                                } => {
+                                    let _ = tx_bg
+                                        .send(Command::Build {
+                                            parquet,
+                                            resume_from,
+                                        })
+                                        .await;
                                 }
                                 JobKind::Update(h) => {
                                     let _ = tx_bg.send(Command::Update(h)).await;
@@ -189,7 +207,9 @@ impl Context {
                         let _g = lock.lock().await;
                         match state_helpers::perform_restore(dir).await {
                             Ok(_) => *st.write().await = ServiceState::Idle,
-                            Err(e) => *st.write().await = ServiceState::Error { msg: e.to_string() },
+                            Err(e) => {
+                                *st.write().await = ServiceState::Error { msg: e.to_string() }
+                            }
                         }
                     }
                 }
@@ -207,9 +227,11 @@ impl Context {
                         Ok(Err(e)) => {
                             *state_bg.write().await = ServiceState::Error { msg: e.to_string() }
                         }
-                        Err(e) => *state_bg.write().await = ServiceState::Error {
-                            msg: format!("join error: {e}")
-                        },
+                        Err(e) => {
+                            *state_bg.write().await = ServiceState::Error {
+                                msg: format!("join error: {e}"),
+                            }
+                        }
                     }
                 }
             }
@@ -240,7 +262,10 @@ impl Context {
             return Ok(());
         }
         // Dispatch other commands to the background worker
-        self.tx.send(cmd).await.map_err(|_| DispatchError::ChannelClosed)
+        self.tx
+            .send(cmd)
+            .await
+            .map_err(|_| DispatchError::ChannelClosed)
     }
 
     pub async fn status(&self) -> Status {
@@ -252,21 +277,18 @@ impl Context {
 
     async fn is_valid_transition(&self, cmd: &Command) -> bool {
         let state = self.state.read().await.clone();
-        matches!((state, cmd),
+        matches!(
+            (state, cmd),
             (ServiceState::Idle, Command::Build { .. })
                 | (ServiceState::Idle, Command::Update(_))
                 | (ServiceState::Idle, Command::Dump { .. })
                 | (ServiceState::Idle, Command::Restore { .. })
-
                 | (ServiceState::Building, Command::Pause)
                 | (ServiceState::Building, Command::Stop)
-
                 | (ServiceState::Updating { .. }, Command::Pause)
                 | (ServiceState::Updating { .. }, Command::Stop)
-
                 | (ServiceState::Paused, Command::Resume)
                 | (ServiceState::Paused, Command::Stop)
-
                 | (ServiceState::Error { .. }, Command::Restore { .. })
         )
     }
@@ -296,8 +318,8 @@ where
 // ------------------------------------------------------------------
 
 mod state_helpers {
-    use std::path::PathBuf;
     use std::io::{Error, ErrorKind};
+    use std::path::PathBuf;
 
     /// Copy snapshot plus derive pollard (same as Phase-A implementation).
     pub fn dump_sync(dir: PathBuf) -> std::io::Result<()> {

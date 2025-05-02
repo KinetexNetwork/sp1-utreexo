@@ -1,8 +1,8 @@
+use crate::leaves::get_all_leaf_hashes;
 /// Builder logic: load leaf hashes from Parquet, build or resume a MemForest, and serialize it.
 use anyhow::{Context, Result};
 use rustreexo::accumulator::mem_forest::MemForest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
-use crate::leaves::get_all_leaf_hashes;
 use std::fs::File;
 
 /// Start building the accumulator from a Parquet dump, optionally resuming from an existing snapshot.
@@ -10,10 +10,9 @@ use std::fs::File;
 pub async fn start_build(parquet: &str, resume_from: Option<&str>) -> Result<()> {
     // Load existing forest or create new
     let mut forest: MemForest<BitcoinNodeHash> = if let Some(path) = resume_from {
-        let mut f = File::open(path)
-            .with_context(|| format!("failed to open snapshot: {}", path))?;
-        MemForest::deserialize(&mut f)
-            .context("failed to deserialize existing MemForest")?
+        let mut f =
+            File::open(path).with_context(|| format!("failed to open snapshot: {}", path))?;
+        MemForest::deserialize(&mut f).context("failed to deserialize existing MemForest")?
     } else {
         MemForest::new()
     };

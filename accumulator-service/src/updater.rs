@@ -1,11 +1,11 @@
 //! Updater logic: fetch spent UTXO leaf hashes from a block via RPC and apply deletions to the MemForest snapshot.
 use anyhow::{anyhow, Context, Result};
-use utreexo_script::updater::{get_block_leaf_hashes, BitcoinRpc};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
-use std::env;
-use std::fs::File;
 use rustreexo::accumulator::mem_forest::MemForest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
+use std::env;
+use std::fs::File;
+use utreexo_script::updater::{get_block_leaf_hashes, BitcoinRpc};
 
 /// RPC wrapper for the BitcoinRpc trait using bitcoincore_rpc::Client.
 struct RpcClient(Client);
@@ -55,7 +55,8 @@ pub async fn update_block(height: u64) -> Result<()> {
         .map_err(|e| anyhow!("failed to delete leaves in MemForest: {}", e))?;
 
     // Serialize updated forest
-    let mut out = File::create("mem_forest.bin").context("failed to open mem_forest.bin for write")?;
+    let mut out =
+        File::create("mem_forest.bin").context("failed to open mem_forest.bin for write")?;
     forest
         .serialize(&mut out)
         .context("failed to serialize MemForest")?;
