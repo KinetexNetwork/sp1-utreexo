@@ -18,7 +18,6 @@
 //      target leaves
 //   6. prints a few basic statistics
 
-use env_logger;
 use log::{debug, info, warn};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};

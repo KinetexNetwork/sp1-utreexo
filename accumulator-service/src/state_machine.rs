@@ -241,27 +241,30 @@ impl Context {
     }
 
     async fn is_valid_transition(&self, cmd: &Command) -> bool {
-        use ServiceState::*;
         let state = self.state.read().await.clone();
-        match (state, cmd) {
-            (ServiceState::Idle, Command::Build { .. }) => true,
-            (ServiceState::Idle, Command::Update(_)) => true,
-            (ServiceState::Idle, Command::Dump { .. }) => true,
-            (ServiceState::Idle, Command::Restore { .. }) => true,
+        matches!((state, cmd),
+            (ServiceState::Idle, Command::Build { .. })
+                | (ServiceState::Idle, Command::Update(_))
+                | (ServiceState::Idle, Command::Dump { .. })
+                | (ServiceState::Idle, Command::Restore { .. })
 
-            (ServiceState::Building, Command::Pause) => true,
-            (ServiceState::Building, Command::Stop) => true,
+                | (ServiceState::Building, Command::Pause)
+                | (ServiceState::Building, Command::Stop)
 
-            (ServiceState::Updating { .. }, Command::Pause) => true,
-            (ServiceState::Updating { .. }, Command::Stop) => true,
+                | (ServiceState::Updating { .. }, Command::Pause)
+                | (ServiceState::Updating { .. }, Command::Stop)
 
-            (ServiceState::Paused, Command::Resume) => true,
-            (ServiceState::Paused, Command::Stop) => true,
+                | (ServiceState::Paused, Command::Resume)
+                | (ServiceState::Paused, Command::Stop)
 
-            (ServiceState::Error { .. }, Command::Restore { .. }) => true,
+                | (ServiceState::Error { .. }, Command::Restore { .. })
+        )
+    }
+}
 
-            _ => false,
-        }
+impl Default for Context {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -307,8 +310,6 @@ mod state_helpers {
         if !forest_src.exists() || !pollard_src.exists() {
             return Err(Error::new(ErrorKind::NotFound, "snapshot missing files"));
         }
-        let _ = std::fs::remove_file("mem_forest.bin");
-        let _ = std::fs::remove_file("pollard.bin");
         std::fs::copy(&forest_src, "mem_forest.bin")?;
         std::fs::copy(&pollard_src, "pollard.bin")?;
         let bh = dir.join("block_hashes.bin");

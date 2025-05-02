@@ -4,7 +4,6 @@ use accumulator_service::state_machine::{Command, Context, ServiceState};
 use rustreexo::accumulator::mem_forest::MemForest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use std::fs::File;
-use std::io::Write;
 
 async fn wait_until_idle(ctx: &Context) {
     loop {
@@ -45,11 +44,8 @@ async fn dump_and_restore_roundtrip() {
     // ensure dump task reported Idle
     wait_until_idle(&ctx).await;
 
-    // corrupt working dir mem_forest.bin so we can detect change
-    File::create("mem_forest.bin")
-        .unwrap()
-        .write_all(b"corrupt")
-        .unwrap();
+    // remove mem_forest.bin to simulate missing/invalid state
+    std::fs::remove_file("mem_forest.bin").unwrap();
 
     // restore
     ctx.send(Command::Restore { dir: snapshot_dir.clone() })

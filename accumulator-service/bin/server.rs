@@ -1,5 +1,4 @@
 use actix_web::{App, HttpServer, web};
-use env_logger;
 use log::info;
 use accumulator_service::{Context, api};
 
