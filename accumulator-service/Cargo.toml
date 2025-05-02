@@ -26,3 +26,4 @@ utreexo = { path = "../utreexo" }
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time" ] }
 tempfile = "3"
+actix-rt = "2"

@@ -176,20 +176,20 @@ impl Context {
                     }
                     // =========== RESTORE ============
                     Command::Restore { dir } => {
-                        let lock = fs_lock.clone();
-                        let st = state_bg.clone();
                         if let Some(job) = &running {
                             job.cancel.cancel();
                             running = None;
                         }
-                        *st.write().await = ServiceState::Idle;
-                        task::spawn(async move {
+                        let lock = fs_lock.clone();
+                        let st = state_bg.clone();
+                        // Execute restore synchronously so that command completes before we report Idle.
+                        {
                             let _g = lock.lock().await;
-                            let res = state_helpers::perform_restore(dir).await;
-                            if let Err(e) = res {
-                                *st.write().await = ServiceState::Error { msg: e.to_string() };
+                            match state_helpers::perform_restore(dir).await {
+                                Ok(_) => *st.write().await = ServiceState::Idle,
+                                Err(e) => *st.write().await = ServiceState::Error { msg: e.to_string() },
                             }
-                        });
+                        }
                     }
                 }
 

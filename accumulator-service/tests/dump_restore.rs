@@ -45,8 +45,11 @@ async fn dump_and_restore_roundtrip() {
     // ensure dump task reported Idle
     wait_until_idle(&ctx).await;
 
-    // corrupt working dir mem_forest.bin
-    File::create("mem_forest.bin").unwrap().write_all(b"corrupt").unwrap();
+    // corrupt working dir mem_forest.bin so we can detect change
+    File::create("mem_forest.bin")
+        .unwrap()
+        .write_all(b"corrupt")
+        .unwrap();
 
     // restore
     ctx.send(Command::Restore { dir: snapshot_dir.clone() })
