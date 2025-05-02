@@ -2,7 +2,7 @@
 use anyhow::{Context, Result};
 use rustreexo::accumulator::mem_forest::MemForest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
-use utreexo_script::get_all_leaf_hashes;
+use crate::leaves::get_all_leaf_hashes;
 use std::fs::File;
 
 /// Start building the accumulator from a Parquet dump, optionally resuming from an existing snapshot.

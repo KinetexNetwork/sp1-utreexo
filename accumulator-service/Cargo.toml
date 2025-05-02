@@ -21,7 +21,15 @@ anyhow = "1.0"
 bitcoin = { version = "0.32", features = ["serde"] }
 rustreexo = { version = "0.4", features = ["with-serde"] }
 utreexo = { path = "../utreexo" }
-"utreexo-script" = { path = "../script" }
+utreexo-script = { path = "../script" }
+
+# on macOS, use the system (Homebrew) duckdb dylib
+[target.'cfg(target_os = "macos")'.dependencies]
+duckdb = { version = "0.9", default-features = false }
+
+# everywhere else (Linux, CI, etc.) build the bundled C++ version
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+duckdb = { version = "0.9", features = ["bundled"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time" ] }
