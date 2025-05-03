@@ -4,8 +4,8 @@ _WIP: SP‑1 powered zk‑circuit for updating a Utreexo accumulator on Bitcoin.
 
 This repo currently has two crates:
 
-1. **script/** — takes a Parquet UTXO dump + block‑hashes and builds your initial accumulator state  
-2. **utreexo/** — native Rust runner for accumulator updates (circuit wiring not hooked up yet)
+1. **utreexo/** — native Rust runner for accumulator updates (circuit wiring not hooked up yet)
+2. **accumulator-service/** — HTTP service for building, updating, and pruning the Utreexo accumulator
 
 ---
 
@@ -44,54 +44,58 @@ This repo currently has two crates:
 
 ## Quick Start
 
-Assume you clone the repo to `$HOME/Development/git/sp1-utreexo`:
+Assuming you have a Parquet dump of your UTXO set at `$HOME/utxo.parquet` (e.g. via `bitcoin-cli dumptxoutset` + an external converter), here’s how to get started:
 
-```bash
-export REPO_ROOT="$HOME/Development/git/sp1-utreexo"
-cd "$REPO_ROOT"
-```
-
-1) **Build**  
+1) Build all Rust components:
    ```bash
    cargo build --all --release
    ```
 
-2) **Dump & convert the UTXO set**  
+2) Start the accumulator-service HTTP server:
    ```bash
-   bitcoin-cli dumptxoutset $HOME/utxo.dump
-
-   $HOME/utxo-to-parquet/target/release/utxo-to-parquet \
-     -i $HOME/utxo.dump \
-     -o $HOME/utxo.parquet
+   cd accumulator-service
+   cargo run --release
    ```
+   The server will listen on `http://127.0.0.1:8080`.
 
-3) **Generate the initial accumulator state**  
+3) Trigger the initial build (Parquet → accumulator):
    ```bash
-   cd "$REPO_ROOT/script"
-   cargo run --release -- $HOME/utxo.parquet $HOME/acc-out
+   curl -X POST http://127.0.0.1:8080/build \
+     -H "Content-Type: application/json" \
+     -d '{"parquet": "/home/user/utxo.parquet", "resume_from": null}'
    ```
-   This will write:
-   - `$HOME/acc-out/block_hashes.bin`  
-   - `$HOME/acc-out/mem_forest.bin`  
+   This will create a `snapshot/` directory containing:
+   - `block_hashes.bin`  
+   - `mem_forest.bin`
 
-4) **(Optional) Test a block update with the native runner**  
-   Prepare a JSON file `input.json` matching the `AccumulatorInput` struct:
-   ```json
-   {
-     "block":   <bitcoin::Block as JSON>,
-     "height":  <u32>,
-     "mem_forest": <Vec<u8> contents of mem_forest.bin>,
-     "input_leaf_hashes": { "<TxIn JSON>": "<leaf‑hash hex>", … }
-   }
-   ```
-   Then:
+4) Control the build process via HTTP:
    ```bash
-   cd "$REPO_ROOT/utreexo"
-   cat input.json \
-     | cargo run --release --features native \
-     > roots.bin
+   # Pause processing
+   curl -X POST http://127.0.0.1:8080/pause
+
+   # Resume processing
+   curl -X POST http://127.0.0.1:8080/resume
+
+   # Stop processing
+   curl -X POST http://127.0.0.1:8080/stop
+
+   # Check status
+   curl http://127.0.0.1:8080/status
    ```
-   `roots.bin` will contain the updated accumulator roots as flat 32‑byte hashes.
+
+5) Update or prune blocks:
+   ```bash
+   # Process a single block height
+   curl -X POST http://127.0.0.1:8080/update \
+     -H "Content-Type: application/json" \
+     -d '{"height": 680000}'
+
+   # Trigger a pollard prune snapshot (writes to snapshot/)
+   curl -X POST http://127.0.0.1:8080/dump
+
+   # Reload from disk snapshot
+   curl -X POST http://127.0.0.1:8080/restore
+   ```
 
 ---
 
