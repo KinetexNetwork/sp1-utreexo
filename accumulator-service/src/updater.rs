@@ -5,7 +5,7 @@ use rustreexo::accumulator::mem_forest::MemForest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use std::env;
 use std::fs::File;
-use utreexo_script::updater::{get_block_leaf_hashes, BitcoinRpc};
+use crate::script_utils::btc_rpc::{get_block_leaf_hashes, BitcoinRpc};
 
 /// RPC wrapper for the BitcoinRpc trait using bitcoincore_rpc::Client.
 struct RpcClient(Client);

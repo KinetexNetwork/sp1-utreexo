@@ -1,4 +1,4 @@
-use crate::leaves::get_all_leaf_hashes;
+use crate::script_utils::parquet::get_all_leaf_hashes;
 /// Builder logic: load leaf hashes from Parquet, build or resume a MemForest, and serialize it.
 use anyhow::{Context, Result};
 use rustreexo::accumulator::mem_forest::MemForest;

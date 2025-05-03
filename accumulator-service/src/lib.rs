@@ -1,7 +1,7 @@
 //! Common library for the accumulator service.
 pub mod api;
 pub mod builder;
-pub mod leaves;
+pub mod script_utils;
 pub mod pollard;
 pub mod state_machine;
 pub mod updater;
