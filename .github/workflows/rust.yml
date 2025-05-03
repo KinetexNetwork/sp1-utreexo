@@ -39,10 +39,10 @@ jobs:
     #     sudo apt install clang
     #     clang --version
         
-    - name: Build circuit
-      run: cargo build --bin utreexo-program
+    - name: Build all
+      run: cargo build --workspace --all-targets --release
     - name: Run utreexo unit tests
-      run: cargo test --bin utreexo
+      run: cargo test --workspace --all-targets --release
 
   lint:
     runs-on: ubuntu-latest
