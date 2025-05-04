@@ -24,6 +24,9 @@ async fn dump_and_restore_roundtrip() {
     let mut f = File::create("mem_forest.bin").unwrap();
     forest.serialize(&mut f).unwrap();
 
+    // touch block_hashes.bin to ensure it is included in snapshot
+    std::fs::write("block_hashes.bin", b"dummy").unwrap();
+
     // create context & issue dump
     let ctx = Context::new();
     let snapshot_dir = workdir.path().join("snap");
@@ -42,6 +45,7 @@ async fn dump_and_restore_roundtrip() {
     }
     assert!(snapshot_dir.join("mem_forest.bin").exists());
     assert!(snapshot_dir.join("pollard.bin").exists());
+    assert!(snapshot_dir.join("block_hashes.bin").exists());
 
     // ensure dump task reported Idle
     wait_until_idle(&ctx).await;
@@ -58,7 +62,9 @@ async fn dump_and_restore_roundtrip() {
     wait_until_idle(&ctx).await;
 
     // after restore mem_forest.bin contents should equal snapshot copy
-    let orig = std::fs::read(snapshot_dir.join("mem_forest.bin")).unwrap();
-    let new = std::fs::read("mem_forest.bin").unwrap();
-    assert_eq!(orig, new);
+    for f in ["mem_forest.bin", "block_hashes.bin"].iter() {
+        let orig = std::fs::read(snapshot_dir.join(f)).unwrap();
+        let new = std::fs::read(f).unwrap();
+        assert_eq!(orig, new, "{} differs after restore", f);
+    }
 }

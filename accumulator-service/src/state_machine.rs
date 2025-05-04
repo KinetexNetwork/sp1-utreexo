@@ -323,32 +323,46 @@ mod state_helpers {
 
     /// Copy snapshot plus derive pollard (same as Phase-A implementation).
     pub fn dump_sync(dir: PathBuf) -> std::io::Result<()> {
+        use std::path::Path;
+
+        // Ensure target directory exists
         std::fs::create_dir_all(&dir)?;
+
+        // Required: mem_forest.bin
         std::fs::copy("mem_forest.bin", dir.join("mem_forest.bin"))?;
-        if std::path::Path::new("block_hashes.bin").exists() {
+
+        // Optional: block_hashes.bin (produced during initial build)
+        if Path::new("block_hashes.bin").exists() {
             let _ = std::fs::copy("block_hashes.bin", dir.join("block_hashes.bin"));
         }
-        // Ensure snapshot directory exists
-        std::fs::create_dir_all(&dir)?;
-        // Copy full MemForest snapshot
-        std::fs::copy("mem_forest.bin", dir.join("mem_forest.bin"))?;
-        // Copy block_hashes.bin if present
-        if std::path::Path::new("block_hashes.bin").exists() {
-            let _ = std::fs::copy("block_hashes.bin", dir.join("block_hashes.bin"));
+
+        // Optional but recommended: pollard.bin.  If it does not exist yet we
+        // create a trivial stub so that `restore_sync` will succeed.  (Proper
+        // Pollard export will be added in the next phase.)
+        if Path::new("pollard.bin").exists() {
+            let _ = std::fs::copy("pollard.bin", dir.join("pollard.bin"));
+        } else {
+            // create empty placeholder
+            std::fs::File::create(dir.join("pollard.bin"))?;
         }
-        // For now, snapshot pollard as same bytes as MemForest (stub)
-        std::fs::copy("mem_forest.bin", dir.join("pollard.bin"))?;
+
         Ok(())
     }
 
     pub fn restore_sync(dir: PathBuf) -> std::io::Result<()> {
         let forest_src = dir.join("mem_forest.bin");
-        let pollard_src = dir.join("pollard.bin");
-        if !forest_src.exists() || !pollard_src.exists() {
-            return Err(Error::new(ErrorKind::NotFound, "snapshot missing files"));
+        if !forest_src.exists() {
+            return Err(Error::new(ErrorKind::NotFound, "mem_forest.bin missing in snapshot"));
         }
+
+        // pollard.bin is optional for now (may be empty placeholder)
+        let pollard_src = dir.join("pollard.bin");
+
         std::fs::copy(&forest_src, "mem_forest.bin")?;
-        std::fs::copy(&pollard_src, "pollard.bin")?;
+        if pollard_src.exists() {
+            let _ = std::fs::copy(&pollard_src, "pollard.bin");
+        }
+
         let bh = dir.join("block_hashes.bin");
         if bh.exists() {
             let _ = std::fs::copy(bh, "block_hashes.bin");
