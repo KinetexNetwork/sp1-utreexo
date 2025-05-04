@@ -1,7 +1,7 @@
 //! Pollard logic stub.
+use crate::script_utils::pollard_conv::forest_to_pollard;
 use anyhow::{anyhow, Result};
 use std::fs;
-use crate::script_utils::pollard_conv::forest_to_pollard;
 
 /// Prune a MemForest snapshot into a Pollard using the provided delete list (ignored for empty deletions).
 /// Reads the serialized MemForest from `snapshot_path`, runs the forest_to_pollard conversion,
