@@ -142,10 +142,15 @@ impl Context {
                     }
                     // =========== PAUSE ============
                     Command::Pause => {
-                        if let Some(job) = &running {
+                        if let Some(job) = running.take() {
+                            // Signal cancellation and wait until task observes it.
                             job.cancel.cancel();
+                            let st = state_bg.clone();
+                            task::spawn(async move {
+                                let _ = job.join.await; // ignore result – will be handled by loop once finished
+                                *st.write().await = ServiceState::Paused;
+                            });
                         }
-                        *state_bg.write().await = ServiceState::Paused;
                     }
                     // =========== RESUME ============
                     Command::Resume => {
@@ -178,6 +183,8 @@ impl Context {
                         }
                         running = None;
                         *state_bg.write().await = ServiceState::Idle;
+                        // also reset running if still Some (task ended early)
+                        running = None;
                     }
                     // =========== DUMP ============
                     Command::Dump { dir } => {
@@ -250,6 +257,23 @@ impl Context {
         if !self.is_valid_transition(&cmd).await {
             return Err(DispatchError::InvalidState);
         }
+
+        // For commands that will certainly move us out of Idle immediately, update
+        // the shared state *before* we enqueue so that concurrent calls see the
+        // new state right away and can be rejected.
+        {
+            let mut st = self.state.write().await;
+            match (&cmd, &*st) {
+                (Command::Build { .. }, ServiceState::Idle) => {
+                    *st = ServiceState::Building;
+                }
+                (Command::Update(h), ServiceState::Idle) => {
+                    *st = ServiceState::Updating { height: *h };
+                }
+                _ => {}
+            }
+        }
+
         // Handle Restore synchronously: apply snapshot immediately
         if let Command::Restore { dir } = &cmd {
             // mark service busy for restore
@@ -285,10 +309,13 @@ impl Context {
                 | (ServiceState::Idle, Command::Restore { .. })
                 | (ServiceState::Building, Command::Pause)
                 | (ServiceState::Building, Command::Stop)
+                | (ServiceState::Building, Command::Dump { .. })
                 | (ServiceState::Updating { .. }, Command::Pause)
                 | (ServiceState::Updating { .. }, Command::Stop)
+                | (ServiceState::Updating { .. }, Command::Dump { .. })
                 | (ServiceState::Paused, Command::Resume)
                 | (ServiceState::Paused, Command::Stop)
+                | (ServiceState::Paused, Command::Dump { .. })
                 | (ServiceState::Error { .. }, Command::Restore { .. })
         )
     }
