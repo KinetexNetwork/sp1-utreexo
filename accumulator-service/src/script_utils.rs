@@ -185,9 +185,9 @@ pub mod pollard_conv {
 #[cfg(test)]
 mod parquet_tests {
     use super::parquet::get_all_leaf_hashes;
-    use tempfile::tempdir;
     use duckdb::Connection;
     use rustreexo::accumulator::node_hash::BitcoinNodeHash;
+    use tempfile::tempdir;
 
     #[test]
     fn test_get_all_leaf_hashes_filters_coinbase() {
@@ -208,17 +208,26 @@ mod parquet_tests {
         let txid_b = "b".repeat(64);
         let txid_c = "c".repeat(64);
 
-        conn.execute(&format!(
-            "INSERT INTO utxos VALUES ('{txid_a}', 50, 0, 0, x'00', TRUE)"
-        ), []).unwrap();
-        conn.execute(&format!(
-            "INSERT INTO utxos VALUES ('{txid_b}', 100, 1, 1, x'0102', FALSE)"
-        ), []).unwrap();
-        conn.execute(&format!(
-            "INSERT INTO utxos VALUES ('{txid_c}', 200, 2, 2, x'0304', FALSE)"
-        ), []).unwrap();
+        conn.execute(
+            &format!("INSERT INTO utxos VALUES ('{txid_a}', 50, 0, 0, x'00', TRUE)"),
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            &format!("INSERT INTO utxos VALUES ('{txid_b}', 100, 1, 1, x'0102', FALSE)"),
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            &format!("INSERT INTO utxos VALUES ('{txid_c}', 200, 2, 2, x'0304', FALSE)"),
+            [],
+        )
+        .unwrap();
         // Export to Parquet
-        let sql = format!("COPY utxos TO '{}' (FORMAT 'parquet')", path.to_string_lossy());
+        let sql = format!(
+            "COPY utxos TO '{}' (FORMAT 'parquet')",
+            path.to_string_lossy()
+        );
         conn.execute(&sql, []).unwrap();
         // Extract leaves
         let leaves: Vec<BitcoinNodeHash> = get_all_leaf_hashes(&path).unwrap();

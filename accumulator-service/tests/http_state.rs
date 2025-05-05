@@ -1,7 +1,7 @@
 //! Integration test using Actix `test` harness without touching the network.
 
-use accumulator_service::{api, state_machine::ServiceState, Context};
-use actix_web::{body::to_bytes, test, web, App};
+use accumulator_service::{api, Context};
+use actix_web::{test, web, App};
 use serde_json::json;
 
 #[actix_rt::test]
@@ -36,7 +36,7 @@ async fn start_build_then_conflict_on_second_build() {
     assert_eq!(resp2.status(), 409);
 
     // /status should return error eventually (because file missing) but at least state not Idle
-#[allow(clippy::let_underscore_future)]
+    #[allow(clippy::let_underscore_future)]
     {
         let req_status = test::TestRequest::get().uri("/status").to_request();
         let resp_status = test::call_service(&app, req_status).await;

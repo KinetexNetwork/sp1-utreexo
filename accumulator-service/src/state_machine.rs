@@ -179,12 +179,11 @@ impl Context {
                     // =========== STOP ============
                     Command::Stop => {
                         if let Some(job) = &running {
+                            // cancel the running job
                             job.cancel.cancel();
                         }
                         running = None;
                         *state_bg.write().await = ServiceState::Idle;
-                        // also reset running if still Some (task ended early)
-                        running = None;
                     }
                     // =========== DUMP ============
                     Command::Dump { dir } => {
@@ -379,7 +378,10 @@ mod state_helpers {
     pub fn restore_sync(dir: PathBuf) -> std::io::Result<()> {
         let forest_src = dir.join("mem_forest.bin");
         if !forest_src.exists() {
-            return Err(Error::new(ErrorKind::NotFound, "mem_forest.bin missing in snapshot"));
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                "mem_forest.bin missing in snapshot",
+            ));
         }
 
         // pollard.bin is optional for now (may be empty placeholder)

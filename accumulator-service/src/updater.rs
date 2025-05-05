@@ -1,11 +1,11 @@
 //! Updater logic: fetch spent UTXO leaf hashes from a block via RPC and apply deletions to the MemForest snapshot.
+use crate::script_utils::btc_rpc::{get_block_leaf_hashes, BitcoinRpc};
 use anyhow::{anyhow, Context, Result};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use rustreexo::accumulator::mem_forest::MemForest;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use std::env;
 use std::fs::File;
-use crate::script_utils::btc_rpc::{get_block_leaf_hashes, BitcoinRpc};
 
 /// RPC wrapper for the BitcoinRpc trait using bitcoincore_rpc::Client.
 struct RpcClient(Client);
