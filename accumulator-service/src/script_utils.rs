@@ -25,8 +25,7 @@ pub mod parquet {
         let conn = Connection::open_in_memory().context("open in-mem DuckDB")?;
         let path_str = parquet.to_str().context("invalid UTF-8 in Parquet path")?;
         let sql = format!(
-            "SELECT txid, amount, vout, height, script FROM '{}' WHERE coinbase = FALSE",
-            path_str
+            "SELECT txid, amount, vout, height, script FROM '{path_str}' WHERE coinbase = FALSE",
         );
         let mut stmt = conn.prepare(&sql).context("prepare DuckDB query")?;
         let mut leaves = Vec::new();
@@ -224,10 +223,7 @@ mod parquet_tests {
         )
         .unwrap();
         // Export to Parquet
-        let sql = format!(
-            "COPY utxos TO '{}' (FORMAT 'parquet')",
-            path.to_string_lossy()
-        );
+        let sql = format!("COPY utxos TO '{path.to_string_lossy()}' (FORMAT 'parquet')",);
         conn.execute(&sql, []).unwrap();
         // Extract leaves
         let leaves: Vec<BitcoinNodeHash> = get_all_leaf_hashes(&path).unwrap();

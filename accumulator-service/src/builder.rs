@@ -10,15 +10,14 @@ use std::fs::File;
 pub async fn start_build(parquet: &str, resume_from: Option<&str>) -> Result<()> {
     // Load existing forest or create new
     let mut forest: MemForest<BitcoinNodeHash> = if let Some(path) = resume_from {
-        let mut f =
-            File::open(path).with_context(|| format!("failed to open snapshot: {}", path))?;
+        let mut f = File::open(path).with_context(|| format!("failed to open snapshot: {path}"))?;
         MemForest::deserialize(&mut f).context("failed to deserialize existing MemForest")?
     } else {
         MemForest::new()
     };
     // Extract all leaf hashes from the Parquet file
     let leaves = get_all_leaf_hashes(parquet)
-        .with_context(|| format!("failed to extract leaf hashes from {}", parquet))?;
+        .with_context(|| format!("failed to extract leaf hashes from {parquet}"))?;
     // Apply all leaves as additions (initial build)
     forest
         .modify(&leaves, &[])
