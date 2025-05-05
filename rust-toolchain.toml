@@ -1,0 +1,3 @@
+[toolchain]
+channel = "nightly-2025-05-03"   # pick a fixed date
+components = [ "clippy", "rustfmt" ]
