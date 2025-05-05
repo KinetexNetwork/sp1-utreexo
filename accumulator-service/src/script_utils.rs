@@ -223,7 +223,10 @@ mod parquet_tests {
         )
         .unwrap();
         // Export to Parquet
-        let sql = format!("COPY utxos TO '{path.to_string_lossy()}' (FORMAT 'parquet')",);
+        let sql = format!(
+            "COPY utxos TO '{}' (FORMAT 'parquet')",
+            path.to_string_lossy()
+        );
         conn.execute(&sql, []).unwrap();
         // Extract leaves
         let leaves: Vec<BitcoinNodeHash> = get_all_leaf_hashes(&path).unwrap();
