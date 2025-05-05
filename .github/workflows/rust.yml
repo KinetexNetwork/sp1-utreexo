@@ -46,24 +46,27 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    # Cache Rust dependencies and build artifacts
-    - name: Cache cargo
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
+      - name: Install Rust nightly
+        run: rustup toolchain install nightly
 
-    - name: Install Clippy
-      run: rustup component add clippy
-    - name: Run fmt
-      run: cargo fmt --all -- --check
-    - name: Run Clippy
-      run: cargo clippy -- -D warnings
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install Clippy
+        run: rustup +nightly component add clippy rustfmt
+
+      - name: Run fmt (nightly)
+        run: cargo +nightly fmt --all -- --check
+
+      - name: Run Clippy (nightly)
+        run: cargo +nightly clippy -- -D warnings
