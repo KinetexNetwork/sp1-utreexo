@@ -2,8 +2,8 @@
 resolver = "2"
 
 members = [
-    "script",
     "utreexo",
+    "accumulator-service",
 ]
 
 [profile.release]

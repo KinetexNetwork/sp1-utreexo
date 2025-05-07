@@ -1,0 +1,37 @@
+[package]
+name = "accumulator-service"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "server"
+path = "bin/server.rs"
+
+[dependencies]
+actix-web = "4"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
+tokio-util = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+env_logger = "0.10"
+bitcoincore-rpc = "0.19"
+hex = "0.4"
+anyhow = "1.0"
+bitcoin = { version = "0.32", features = ["serde"] }
+rustreexo = { version = "0.4", features = ["with-serde"] }
+utreexo = { path = "../utreexo" }
+
+# on macOS, use the system (Homebrew) duckdb dylib
+[target.'cfg(target_os = "macos")'.dependencies]
+duckdb = { version = "0.9", default-features = false }
+
+# everywhere else (Linux, CI, etc.) build the bundled C++ version
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+duckdb = { version = "0.9", features = ["bundled"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time" ] }
+tempfile = "3"
+actix-rt = "2"
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }

@@ -1,97 +1,117 @@
-# sp1‑utreexo
 
-_WIP: SP‑1 powered zk‑circuit for updating a Utreexo accumulator on Bitcoin._
+# sp1-utreexo
 
-This repo currently has two crates:
-
-1. **script/** — takes a Parquet UTXO dump + block‑hashes and builds your initial accumulator state  
-2. **utreexo/** — native Rust runner for accumulator updates (circuit wiring not hooked up yet)
+ZK-powered accumulator for Bitcoin UTXO sets using the Utreexo design and SP-1 zkVM circuits.
+This project implements:
+  - `utreexo/`: a native Rust runner and zk-circuit wiring (under development) to update an accumulator state.
+  - `accumulator-service/`: an HTTP server to build, update and prune a Utreexo accumulator from Bitcoin data.
 
 ---
 
 ## Prerequisites
 
-0. **Bitcoin Core** (v0.21+), fully synced  
-   ```bash
-   brew install bitcoin
-   ```  
-   Edit `$HOME/.bitcoin/bitcoin.conf`:
-   ```
-   server=1
-   txindex=1
-   rpcuser=<USER>
-   rpcpassword=<PASS>
-   ```  
-   Start and sync:
-   ```bash
-   bitcoind -daemon
-   ```
-
-1. **utxo‑to‑parquet** (dump → Parquet converter)  
-   ```bash
-   git clone https://github.com/romanz/utxo-to-parquet.git $HOME/utxo-to-parquet
-   cd $HOME/utxo-to-parquet
-   cargo build --release
-   ```
-
-2. **RPC credentials**  
-   ```bash
-   export BITCOIN_CORE_RPC_URL="http://127.0.0.1:8332"
-   export BITCOIN_CORE_COOKIE_FILE="$HOME/.bitcoin/.cookie"
-   ```
+- Rust (1.60+) with Cargo
+- Bitcoin Core (v0.21+) fully synced with `txindex=1` and `server=1` enabled:
+  ```ini
+  # ~/.bitcoin/bitcoin.conf
+  server=1
+  txindex=1
+  rpcuser=<USER>
+  rpcpassword=<PASS>
+  ```
+- `bitcoin-cli` on `$PATH` for RPC calls
+- `jq` (for test-data scripts)
+- [utxo-to-parquet](https://github.com/romanz/utxo-to-parquet) to convert Bitcoin Core dump to Parquet
+- Environment variables:
+  ```bash
+  export BITCOIN_CORE_RPC_URL="http://127.0.0.1:8332"
+  export BITCOIN_CORE_COOKIE_FILE="$HOME/.bitcoin/.cookie"
+  ```
 
 ---
 
-## Quick Start
-
-Assume you clone the repo to `$HOME/Development/git/sp1-utreexo`:
+## Installation
 
 ```bash
-export REPO_ROOT="$HOME/Development/git/sp1-utreexo"
-cd "$REPO_ROOT"
+# Clone repository
+git clone https://github.com/your-org/sp1-utreexo.git
+cd sp1-utreexo
+
+# Build all components
+cargo build --all --release
+
+# (Optional) Run tests
+cargo test --all
 ```
 
-1) **Build**  
-   ```bash
-   cargo build --all --release
-   ```
+## Configuration
 
-2) **Dump & convert the UTXO set**  
-   ```bash
-   bitcoin-cli dumptxoutset $HOME/utxo.dump
+- Ensure `BITCOIN_CORE_RPC_URL` and `BITCOIN_CORE_COOKIE_FILE` are exported
+- Place your Parquet UTXO dump at a known path (e.g. `$HOME/utxo.parquet`)
 
-   $HOME/utxo-to-parquet/target/release/utxo-to-parquet \
-     -i $HOME/utxo.dump \
-     -o $HOME/utxo.parquet
-   ```
+## Usage
 
-3) **Generate the initial accumulator state**  
-   ```bash
-   cd "$REPO_ROOT/script"
-   cargo run --release -- $HOME/utxo.parquet $HOME/acc-out
-   ```
-   This will write:
-   - `$HOME/acc-out/block_hashes.bin`  
-   - `$HOME/acc-out/mem_forest.bin`  
+### accumulator-service
 
-4) **(Optional) Test a block update with the native runner**  
-   Prepare a JSON file `input.json` matching the `AccumulatorInput` struct:
-   ```json
-   {
-     "block":   <bitcoin::Block as JSON>,
-     "height":  <u32>,
-     "mem_forest": <Vec<u8> contents of mem_forest.bin>,
-     "input_leaf_hashes": { "<TxIn JSON>": "<leaf‑hash hex>", … }
-   }
-   ```
-   Then:
-   ```bash
-   cd "$REPO_ROOT/utreexo"
-   cat input.json \
-     | cargo run --release --features native \
-     > roots.bin
-   ```
-   `roots.bin` will contain the updated accumulator roots as flat 32‑byte hashes.
+An HTTP server to build and manage a Utreexo accumulator from a Parquet dump.
+
+```bash
+cd accumulator-service
+cargo run --release
+# Server listens at http://127.0.0.1:8080
+```
+
+Endpoints:
+  - POST /build  `{ "parquet": "/path/to/utxo.parquet", "resume_from": null }`
+    → initializes and builds accumulator into `snapshot/`
+  - POST /pause  → pause ongoing build
+  - POST /resume → resume paused build
+  - POST /stop   → stop processing
+  - GET  /status → get current build status
+  - POST /update `{ "height": 680000 }` → apply a block update
+  - POST /dump   → write a pruned Pollard snapshot to `snapshot/`
+  - POST /restore→ reload from last disk snapshot
+
+### utreexo (native runner)
+
+Process a block with a local accumulator via command line (native feature):
+
+```bash
+# Example: feed JSON input to the utreexo binary
+cargo run --release -p utreexo --features native \
+  < input.json > output.bin
+```
+
+Refer to `utreexo/src/main.rs` for expected JSON format and output encoding.
+
+### Test Data Generation
+
+Use the `extract_from_block.sh` script to create fixtures for UTXO outputs:
+
+```bash
+export BITCOIN_CORE_COOKIE_FILE="$HOME/.bitcoin/.cookie"
+./extract_from_block.sh <TXID> <VOUT> <HEIGHT> > test-data/utxo_output.txt
+```
+
+## Testing
+
+Run all Rust unit tests:
+
+```bash
+cargo test --all
+```
+
+## Project Structure
+
+- `utreexo/` — Rust crate for accumulator logic and zk-circuit wiring
+- `accumulator-service/` — HTTP API service for accumulator build & updates
+- `extract_from_block.sh` — helper script for test fixtures
+- `Roadmap.md` — project TODOs and future work
+
+## Roadmap & Contributing
+
+See [Roadmap.md](Roadmap.md) for known issues, performance goals, and planned features.
+Contributions welcome via issues and pull requests.
 
 ---
 
