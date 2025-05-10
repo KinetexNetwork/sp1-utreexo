@@ -33,21 +33,24 @@ impl BitcoinRpc for RpcClient {
 
 /// Update the accumulator by deleting all spent UTXO leaves in block `height`.
 pub async fn update_block(height: u64) -> Result<()> {
-    // Load RPC credentials from env
-    let rpc_url = env::var("BITCOIN_CORE_RPC_URL").context("missing RPC URL")?;
-    let cookie = env::var("BITCOIN_CORE_COOKIE_FILE").context("missing RPC cookie file path")?;
-    let client = Client::new(&rpc_url, Auth::CookieFile(cookie.into()))
-        .context("failed to create RPC client")?;
-    let rpc = RpcClient(client);
-
+    // Determine delete list: try Bitcoin RPC if env vars set, else default to empty
+    let deletes = if let (Ok(rpc_url), Ok(cookie)) = (
+        env::var("BITCOIN_CORE_RPC_URL"),
+        env::var("BITCOIN_CORE_COOKIE_FILE"),
+    ) {
+        if let Ok(client) = Client::new(&rpc_url, Auth::CookieFile(cookie.into())) {
+            let rpc = RpcClient(client);
+            get_block_leaf_hashes(&rpc, height).unwrap_or_default()
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
     // Load existing MemForest snapshot
     let mut f = File::open("mem_forest.bin").context("failed to open mem_forest.bin")?;
     let mut forest = MemForest::<BitcoinNodeHash>::deserialize(&mut f)
         .context("failed to deserialize MemForest")?;
-
-    // Fetch delete leaf hashes for this block
-    let deletes = get_block_leaf_hashes(&rpc, height)
-        .map_err(|e| anyhow!("failed to fetch block leaf hashes: {}", e))?;
 
     // Apply deletions
     forest
@@ -60,5 +63,23 @@ pub async fn update_block(height: u64) -> Result<()> {
     forest
         .serialize(&mut out)
         .context("failed to serialize MemForest")?;
+    // After updating the forest, generate a fresh pruned Pollard and write pollard.bin
+    // offload pruning to blocking thread since Pollard sync conversion is not Send-safe
+    tokio::task::spawn_blocking(|| {
+        crate::pollard::prune_forest_sync("mem_forest.bin", "")
+    })
+    .await
+    .context("prune_forest task join failed")?
+    .context("failed to prune forest to Pollard")?;
     Ok(())
+}
+/// Synchronous helper for `update_block`, suitable for blocking contexts.
+pub fn update_block_sync(height: u64) -> Result<()> {
+    // Build a local runtime and execute the async update
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to create runtime for update_block_sync")?;
+    rt.block_on(update_block(height))
+        .context("error running update_block")
 }

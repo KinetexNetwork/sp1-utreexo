@@ -125,14 +125,11 @@ impl Context {
                             continue;
                         }
                         *state_bg.write().await = ServiceState::Updating { height: h };
+                        // Spawn a blocking task for update + prune since MemForest is !Send
                         let cancel = CancellationToken::new();
-                        let task_cancel = cancel.clone();
-                        let handle = task::spawn(async move {
-                            run_with_cancel(
-                                task_cancel,
-                                async move { updater::update_block(h).await },
-                            )
-                            .await
+                        let handle = task::spawn_blocking(move || {
+                            // Perform async update in sync context
+                            updater::update_block_sync(h)
                         });
                         running = Some(RunningJob {
                             cancel,

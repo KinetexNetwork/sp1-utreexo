@@ -24,6 +24,20 @@ pub async fn prune_forest(snapshot_path: &str, _delete_list: &str) -> Result<()>
         .map_err(|e| anyhow!("failed to serialize Pollard: {}", e))?;
     Ok(())
 }
+/// Synchronous version of prune_forest for use in blocking contexts.
+pub fn prune_forest_sync(snapshot_path: &str, _delete_list: &str) -> Result<()> {
+    // Load the full MemForest bytes
+    let data = fs::read(snapshot_path)?;
+    // Convert to Pollard (empty deletions by default)
+    let pollard =
+        forest_to_pollard(&data, &[]).map_err(|e| anyhow!("pollard conversion failed: {}", e))?;
+    // Serialize Pollard to disk
+    let mut out = fs::File::create("pollard.bin")?;
+    pollard
+        .serialize(&mut out)
+        .map_err(|e| anyhow!("failed to serialize Pollard: {}", e))?;
+    Ok(())
+}
 
 // ----------------------------------------------------------------------------
 // Build an in-memory Pollard reflecting a single block's deletes and additions

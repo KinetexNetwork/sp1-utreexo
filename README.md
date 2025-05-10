@@ -63,12 +63,12 @@ cargo run --release
 
 Endpoints:
   - POST /build  `{ "parquet": "/path/to/utxo.parquet", "resume_from": null }`
-    → initializes and builds accumulator into `snapshot/`
+    → initializes and builds accumulator state, producing `mem_forest.bin` and `block_hashes.bin` in the working directory
   - POST /pause  → pause ongoing build
   - POST /resume → resume paused build
   - POST /stop   → stop processing
   - GET  /status → get current build status
-  - POST /update `{ "height": 680000 }` → apply a block update
+  - POST /update `{ "height": 680000 }` → apply a block update, updating `mem_forest.bin` and generating a fresh pruned `pollard.bin`
   - POST /dump   → write a pruned Pollard snapshot to `snapshot/`
   - POST /restore→ reload from last disk snapshot
 
