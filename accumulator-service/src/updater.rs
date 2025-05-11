@@ -65,12 +65,10 @@ pub async fn update_block(height: u64) -> Result<()> {
         .context("failed to serialize MemForest")?;
     // After updating the forest, generate a fresh pruned Pollard and write pollard.bin
     // offload pruning to blocking thread since Pollard sync conversion is not Send-safe
-    tokio::task::spawn_blocking(|| {
-        crate::pollard::prune_forest_sync("mem_forest.bin", "")
-    })
-    .await
-    .context("prune_forest task join failed")?
-    .context("failed to prune forest to Pollard")?;
+    tokio::task::spawn_blocking(|| crate::pollard::prune_forest_sync("mem_forest.bin", ""))
+        .await
+        .context("prune_forest task join failed")?
+        .context("failed to prune forest to Pollard")?;
     Ok(())
 }
 /// Synchronous helper for `update_block`, suitable for blocking contexts.
