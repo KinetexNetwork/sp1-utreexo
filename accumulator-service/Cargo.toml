@@ -2,6 +2,10 @@
 name = "accumulator-service"
 version = "0.1.0"
 edition = "2021"
+[[bin]]
+name = "verify_update"
+path = "bin/verify_update.rs"
+edition = "2021"
 
 [[bin]]
 name = "server"
@@ -21,6 +25,7 @@ anyhow = "1.0"
 bitcoin = { version = "0.32", features = ["serde"] }
 rustreexo = { version = "0.4", features = ["with-serde"] }
 utreexo = { path = "../utreexo" }
+clap = { version = "4", features = ["derive"] }
 
 # on macOS, use the system (Homebrew) duckdb dylib
 [target.'cfg(target_os = "macos")'.dependencies]

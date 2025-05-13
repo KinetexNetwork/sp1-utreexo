@@ -22,7 +22,7 @@ async fn start_build_then_conflict_on_second_build() {
     // First /build should be 202 Accepted
     let req1 = test::TestRequest::post()
         .uri("/build")
-        .set_json(&json!({ "parquet": "nonexistent.parquet", "resume_from": null }))
+        .set_json(json!({ "parquet": "nonexistent.parquet", "resume_from": null }))
         .to_request();
     let resp1 = test::call_service(&app, req1).await;
     assert_eq!(resp1.status(), 202);
@@ -30,7 +30,7 @@ async fn start_build_then_conflict_on_second_build() {
     // Second /build while first still running should yield 409 Conflict
     let req2 = test::TestRequest::post()
         .uri("/build")
-        .set_json(&json!({ "parquet": "other.parquet", "resume_from": null }))
+        .set_json(json!({ "parquet": "other.parquet", "resume_from": null }))
         .to_request();
     let resp2 = test::call_service(&app, req2).await;
     assert_eq!(resp2.status(), 409);
